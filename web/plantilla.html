@@ -1,0 +1,381 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>heat2cool</title>
+<style>
+:root{--bg:#f4f6f9;--panel:#fff;--ink:#14202e;--muted:#5b6b7d;--line:#dfe5ec;--accent:#0b6bcb;
+--good:#178a4c;--bad:#c23b32;--warn:#b7791f;--q0:#d6e6f7;--q1:#d4f0dc;--q2:#fdf0c4;--q3:#f9d3d0;--shadow:0 1px 2px rgba(16,24,40,.06),0 1px 3px rgba(16,24,40,.08)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0e141b;--panel:#16202b;--ink:#e6edf3;--muted:#93a4b5;--line:#253241;--accent:#4ea1f3;
+--good:#3fbf7a;--bad:#f0736a;--warn:#e0b04a;--q0:#1c3550;--q1:#173d28;--q2:#41361a;--q3:#4a2220;--shadow:none}}
+:root[data-theme="dark"]{--bg:#0e141b;--panel:#16202b;--ink:#e6edf3;--muted:#93a4b5;--line:#253241;--accent:#4ea1f3;
+--good:#3fbf7a;--bad:#f0736a;--warn:#e0b04a;--q0:#1c3550;--q1:#173d28;--q2:#41361a;--q3:#4a2220;--shadow:none}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+header{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;padding:14px 20px;background:var(--panel);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
+h1{font-size:18px;margin:0;letter-spacing:.2px}h1 small{color:var(--muted);font-weight:500;margin-left:8px;font-size:13px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{border:0;background:transparent;color:var(--ink);padding:7px 14px;cursor:pointer;font:inherit}
+.seg button.on{background:var(--accent);color:#fff}
+.btn{border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:7px 12px;border-radius:8px;cursor:pointer;font:inherit}
+.btn:hover{border-color:var(--accent)}
+.acciones{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.layout{display:grid;grid-template-columns:340px 1fr;gap:16px;padding:16px 20px;max-width:1600px;margin:0 auto}
+@media (max-width:980px){.layout{grid-template-columns:1fr;padding:12px 16px}}
+aside{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:6px 0;max-height:calc(100vh - 100px);overflow:auto;position:sticky;top:76px;box-shadow:var(--shadow)}
+@media (max-width:980px){aside{position:static;max-height:none}}
+details{border-bottom:1px solid var(--line)}details:last-child{border-bottom:0}
+summary{cursor:pointer;padding:10px 16px;font-weight:600;list-style:none;display:flex;justify-content:space-between}
+summary::after{content:"+";color:var(--muted)}details[open] summary::after{content:"−"}
+.campo{display:grid;grid-template-columns:1fr 92px;gap:8px;align-items:center;padding:4px 16px}
+.campo label{font-size:12.5px}.campo label .u{color:var(--muted)}
+.campo input,select.eq{width:100%;padding:5px 7px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink);font:inherit;font-size:13px}
+.campo input.sup{border-left:3px solid var(--warn)}
+.eqbox{padding:6px 16px 10px}.eqbox label{font-size:12.5px;display:block;margin:6px 0 3px}
+.fila2{display:flex;gap:8px;align-items:center;margin-top:4px;font-size:12px;color:var(--muted)}
+.fila2 input{width:60px;padding:3px 6px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink)}
+main{display:flex;flex-direction:column;gap:16px;min-width:0}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px}
+.kpi{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px;box-shadow:var(--shadow)}
+.kpi .t{font-size:12px;color:var(--muted)}.kpi .v{font-size:22px;font-weight:700;margin-top:2px;font-variant-numeric:tabular-nums}
+.kpi .s{font-size:12px;color:var(--muted)}.pos{color:var(--good)}.neg{color:var(--bad)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}@media (max-width:1200px){.grid2{grid-template-columns:1fr}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;box-shadow:var(--shadow);min-width:0}
+.card h2{font-size:14px;margin:0 0 8px}.card .desc{color:var(--muted);font-size:12.5px;margin:-4px 0 8px}
+.plot{width:100%;height:340px}
+table{border-collapse:collapse;width:100%;font-size:12.5px;font-variant-numeric:tabular-nums}
+th,td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+th:first-child,td:first-child{text-align:left}th{color:var(--muted);font-weight:600}
+.tabwrap{overflow-x:auto}
+.badge{display:inline-block;padding:1px 8px;border-radius:99px;font-size:11.5px;color:var(--ink)}
+.q0{background:var(--q0)}.q1{background:var(--q1)}.q2{background:var(--q2)}.q3{background:var(--q3)}
+.ctl{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:8px;font-size:12.5px}
+.ctl select,.ctl input{padding:4px 6px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink);font:inherit;font-size:12.5px;max-width:100%}
+.ctl input{width:90px}
+ul.avisos{margin:0;padding-left:18px}ul.avisos li{margin:4px 0}
+.err{background:var(--q3);border-radius:8px;padding:10px 14px;display:none}
+footer{color:var(--muted);font-size:12px;text-align:center;padding:10px 20px 24px}
+</style>
+</head>
+<body>
+<header>
+  <h1>heat2cool <small>CPD → bomba de calor → absorción</small></h1>
+  <div class="seg" id="modos"></div>
+  <div class="acciones">
+    <button class="btn" id="b-exp" title="Descarga el caso actual como JSON">Exportar caso</button>
+    <label class="btn" title="Carga un caso JSON exportado antes">Importar<input type="file" id="b-imp" accept=".json" hidden></label>
+    <button class="btn" id="b-reset">Restablecer</button>
+    <button class="btn" id="b-tema" title="Tema claro / oscuro" aria-label="Cambiar tema">◐</button>
+  </div>
+</header>
+<div class="layout">
+  <aside id="panel"></aside>
+  <main>
+    <div class="err" id="error"></div>
+    <div class="kpis" id="kpis"></div>
+    <div class="grid2">
+      <div class="card"><h2>Flujos de energía a plena carga</h2><p class="desc" id="d-sankey">kW en condiciones de diseño</p><div class="plot" id="g-sankey"></div></div>
+      <div class="card"><h2>Coste anual: línea base frente a sistema nuevo</h2><p class="desc">€/año. La línea base cubre todo el frío con la enfriadora existente.</p><div class="plot" id="g-costes"></div></div>
+    </div>
+    <div class="card">
+      <h2>Mapa de escenarios</h2>
+      <div class="ctl" id="ctl-mapa"></div>
+      <p class="desc">Cada celda es un año completo calculado con las curvas. Pulsa una celda para llevar esos valores al caso. Rangos: desde:hasta:paso.</p>
+      <div class="plot" id="g-mapa" style="height:400px"></div>
+    </div>
+    <div class="grid2">
+      <div class="card"><h2>Sensibilidad ±20 %</h2><p class="desc">Cambio del ahorro neto al mover cada parámetro un 20 %</p><div class="plot" id="g-tornado" style="height:420px"></div></div>
+      <div class="card"><h2>Equipos</h2><div class="tabwrap" id="t-equipos"></div><h2 style="margin-top:14px">Circuitos a plena carga</h2><div class="tabwrap" id="t-circ"></div></div>
+    </div>
+    <div class="grid2">
+      <div class="card"><h2>Funcionamiento por nivel de carga</h2><div class="plot" id="g-cargas"></div></div>
+      <div class="card"><h2>Avisos</h2><ul class="avisos" id="avisos"></ul></div>
+    </div>
+    <div class="card"><h2>Detalle por nivel de carga (kW)</h2><div class="tabwrap" id="t-cargas"></div></div>
+  </main>
+</div>
+<footer>heat2cool · cálculo en el navegador con el mismo motor que la versión Python · los importes dependen de los parámetros marcados en naranja (supuestos)</footer>
+
+<script>/*__PLOTLY__*/</script>
+<script>/*__MOTOR__*/</script>
+<script>
+const DATOS = /*__DATOS__*/;
+const CAT = DATOS.catalogo;
+const CAL = {0: ["genérico", "q0"], 1: ["dentro de rango", "q1"], 2: ["extrapolado", "q2"], 3: ["fuera de rango", "q3"]};
+const fmt0 = new Intl.NumberFormat("es-ES", {maximumFractionDigits: 0});
+const fmt1 = new Intl.NumberFormat("es-ES", {maximumFractionDigits: 1, minimumFractionDigits: 1});
+const fmt2 = new Intl.NumberFormat("es-ES", {maximumFractionDigits: 2, minimumFractionDigits: 2});
+const eur = (x) => fmt0.format(x) + " €";
+const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+const etq = (r) => (DATOS.params.find((p) => p[1] === r) || [0, 0, r])[2];
+const uni = (r) => (DATOS.params.find((p) => p[1] === r) || [0, 0, 0, 0, ""])[4];
+const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+
+let caso = JSON.parse(JSON.stringify(DATOS.caso));
+let modo = "sin_recuperacion";
+try { const g = localStorage.getItem("heat2cool_caso"); if (g) caso = Object.assign(caso, JSON.parse(g)); } catch (e) {}
+try { const t = localStorage.getItem("heat2cool_tema"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
+
+// ---------------------------------------------------------------- panel de entradas
+function construirPanel() {
+  const panel = document.getElementById("panel");
+  panel.innerHTML = "";
+  const eq = document.createElement("details"); eq.open = true;
+  eq.innerHTML = "<summary>Equipos</summary>";
+  DATOS.equipos.forEach(([ruta, nombre, tipo], i) => {
+    const rn = DATOS.unidades[i][0];
+    const box = document.createElement("div"); box.className = "eqbox";
+    const opts = Object.keys(CAT).filter((n) => CAT[n].tipo === tipo)
+      .map((n) => `<option value="${esc(n)}" ${n === caso[ruta] ? "selected" : ""}>${esc(n)}</option>`).join("");
+    box.innerHTML = `<label>${nombre} <span class="badge" id="q-${ruta}"></span></label>
+      <select class="eq" data-r="${ruta}">${opts}</select>
+      <div class="fila2">Nº unidades <input type="number" min="0" step="1" data-r="${rn}" value="${caso[rn]}"> (0 = automático)</div>`;
+    eq.appendChild(box);
+  });
+  panel.appendChild(eq);
+  const bloques = [];
+  for (const p of DATOS.params) if (!bloques.includes(p[0])) bloques.push(p[0]);
+  bloques.forEach((b, i) => {
+    const d = document.createElement("details"); d.open = i < 4;
+    d.innerHTML = `<summary>${b}</summary>`;
+    for (const [, ruta, et, , u, origen, nota] of DATOS.params.filter((p) => p[0] === b)) {
+      const f = document.createElement("div"); f.className = "campo";
+      f.title = (origen === "SUPUESTO" ? "[SUPUESTO] " : "[BASE] ") + (nota || "");
+      f.innerHTML = `<label>${et} <span class="u">${u}</span></label>
+        <input type="number" step="any" data-r="${ruta}" value="${caso[ruta]}" class="${origen === "SUPUESTO" ? "sup" : ""}">`;
+      d.appendChild(f);
+    }
+    panel.appendChild(d);
+  });
+  const pf = document.createElement("details");
+  pf.innerHTML = "<summary>Perfil de carga del CPD</summary>";
+  caso.perfil.forEach(([c, w], i) => {
+    const f = document.createElement("div"); f.className = "campo";
+    f.innerHTML = `<label>Horas al ${fmt0.format(c * 100)} % de carga <span class="u">fracción</span></label>
+      <input type="number" step="0.01" min="0" max="1" data-perfil="${i}" value="${w}">`;
+    pf.appendChild(f);
+  });
+  panel.appendChild(pf);
+  panel.querySelectorAll("[data-r]").forEach((el) => el.addEventListener("input", () => {
+    const v = el.tagName === "SELECT" ? el.value : parseFloat(el.value);
+    if (el.tagName !== "SELECT" && !isFinite(v)) return;
+    caso[el.dataset.r] = v; programar();
+  }));
+  panel.querySelectorAll("[data-perfil]").forEach((el) => el.addEventListener("input", () => {
+    const v = parseFloat(el.value); if (!isFinite(v)) return;
+    caso.perfil[+el.dataset.perfil][1] = v; programar();
+  }));
+}
+
+// ---------------------------------------------------------------- mapa: controles
+const B = DATOS.barrido;
+const mapa = {x: B[0] ? B[0][0] : "cal.t_ida", xv: B[0] ? B[0][1] : [75, 80, 85, 90, 95],
+  y: B[1] ? B[1][0] : "frio.t_imp", yv: B[1] ? B[1][1] : [4, 5, 6, 7, 8, 9, 10], metrica: "ahorro_neto"};
+const METRICAS = {ahorro_neto: "Ahorro neto (€/a)", eer_sis: "EER sistema", capex_total: "CAPEX (€)",
+  retorno_anos: "Retorno (años)", cop_abs: "COP absorción", cop_bdc1: "COP BdC 1", cobertura_frio: "Cobertura del frío"};
+const MENOS_ES_MEJOR = ["capex_total", "retorno_anos"];
+const rango = (v) => `${v[0]}:${v[v.length - 1]}:${v.length > 1 ? +(v[1] - v[0]).toFixed(3) : 1}`;
+function parseRango(s) {
+  const [a, b, p] = s.split(":").map((x) => parseFloat(x.replace(",", ".")));
+  if (!isFinite(a) || !isFinite(b) || !(p > 0) || b < a) return null;
+  const out = []; for (let v = a; v <= b + 1e-9 && out.length < 40; v += p) out.push(+v.toFixed(4));
+  return out;
+}
+const alrededor = (v) => [0.8, 0.9, 1, 1.1, 1.2].map((f) => +(v * f).toFixed(3));
+function construirCtlMapa() {
+  const opts = (sel) => DATOS.params.map((p) => `<option value="${p[1]}" ${p[1] === sel ? "selected" : ""}>${p[2]}</option>`).join("");
+  const el = document.getElementById("ctl-mapa");
+  el.innerHTML = `Mostrar <select id="m-met">${Object.entries(METRICAS).map(([k, v]) => `<option value="${k}" ${k === mapa.metrica ? "selected" : ""}>${v}</option>`).join("")}</select>
+    X <select id="m-x">${opts(mapa.x)}</select> <input id="m-xr" value="${rango(mapa.xv)}" aria-label="rango X">
+    Y <select id="m-y">${opts(mapa.y)}</select> <input id="m-yr" value="${rango(mapa.yv)}" aria-label="rango Y">`;
+  el.querySelector("#m-met").onchange = (e) => { mapa.metrica = e.target.value; dibujarMapa(); };
+  el.querySelector("#m-x").onchange = (e) => { mapa.x = e.target.value; mapa.xv = alrededor(caso[mapa.x]); construirCtlMapa(); dibujarMapa(); };
+  el.querySelector("#m-y").onchange = (e) => { mapa.y = e.target.value; mapa.yv = alrededor(caso[mapa.y]); construirCtlMapa(); dibujarMapa(); };
+  el.querySelector("#m-xr").onchange = (e) => { const v = parseRango(e.target.value); if (v) { mapa.xv = v; dibujarMapa(); } };
+  el.querySelector("#m-yr").onchange = (e) => { const v = parseRango(e.target.value); if (v) { mapa.yv = v; dibujarMapa(); } };
+}
+
+// ---------------------------------------------------------------- dibujo
+const layoutBase = () => ({margin: {l: 50, r: 16, t: 10, b: 40}, paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
+  font: {color: css("--ink"), family: "system-ui, Segoe UI, sans-serif", size: 12}, xaxis: {gridcolor: css("--line")},
+  yaxis: {gridcolor: css("--line")}, legend: {orientation: "h", y: -0.18}});
+const cfg = {displaylogo: false, responsive: true, modeBarButtonsToRemove: ["lasso2d", "select2d"]};
+
+function kpis(r, eq) {
+  const k = [
+    ["Ahorro neto", eur(r.ahorro_neto) + "/a", r.ahorro_neto >= 0 ? "pos" : "neg", "frente a la línea base"],
+    ["CAPEX", eur(r.capex_total), "", `${fmt0.format(r.capex_anual)} €/a anualizado`],
+    ["Retorno simple", r.retorno_anos === Infinity ? "no se recupera" : fmt1.format(r.retorno_anos) + " años", "", "sin descontar"],
+    ["EER sistema nuevo", fmt2.format(r.eer_sis), "", `enfriadora existente ${fmt2.format(r.eer_enf)}`],
+    ["Frío cubierto", fmt0.format(r.cobertura_frio * 100) + " %", "", r.limitante],
+    ["Empata con EER", eq.eer_equilibrio == null ? "—" : fmt2.format(eq.eer_equilibrio), "", `de la enfriadora (supuesto ${caso["enf.eer_ref"]})`],
+  ];
+  document.getElementById("kpis").innerHTML = k.map(([t, v, c, s]) =>
+    `<div class="kpi"><div class="t">${t}</div><div class="v ${c}">${v}</div><div class="s">${s}</div></div>`).join("");
+}
+
+function sankey(r) {
+  const rec = modo === "con_recuperacion";
+  const d = rec ? H2C.punto(caso, H2C.dimensionar(caso, H2C.modelos(caso, CAT)), 1, true) : r.diseno;
+  document.getElementById("d-sankey").textContent = rec ? "kW a plena carga con R1/R2 en marcha" : "kW a plena carga (diseño)";
+  const N = ["Calor del CPD", "Electricidad BdC 1", "BdC 1", "Calor extraído del agua enfriada", "Absorción", "Rechazo",
+    "Torre existente", "Adiabático nuevo", "R1 precalentar red", "BdC R2", "Electricidad R2", "Calor a 90 °C (R2)"];
+  const COL = ["#d9534f", "#e8a33d", "#d9534f", "#3b8bd9", "#6f42c1", "#8c99a6", "#8c99a6", "#8c99a6", "#178a4c", "#178a4c", "#e8a33d", "#178a4c"];
+  const L = [[0, 2, d.q_evap], [1, 2, d.w_bdc1], [2, 4, d.q_gen], [3, 4, d.q_frio], [4, 5, d.q_rej], [5, 6, d.q_torre],
+    [5, 7, d.q_adiab], [5, 8, d.q_r1], [5, 9, d.q_r2_ext], [10, 9, d.w_r2], [9, 11, d.q_r2]].filter((l) => l[2] > 0.05);
+  Plotly.react("g-sankey", [{type: "sankey", arrangement: "snap", valueformat: ".1f", valuesuffix: " kW",
+    node: {label: N, pad: 14, thickness: 14, color: COL, line: {width: 0}},
+    link: {source: L.map((l) => l[0]), target: L.map((l) => l[1]), value: L.map((l) => l[2]), color: L.map((l) => COL[l[0]] + "44")}}],
+  Object.assign(layoutBase(), {margin: {l: 8, r: 8, t: 8, b: 8}}), cfg);
+}
+
+function costes(r) {
+  const partidas = [["Electricidad", r.c_elec_base, r.c_elec, "#e8a33d"], ["Agua", r.c_agua_base, r.c_agua, "#3b8bd9"],
+    ["Mantenimiento", 0, r.c_mant, "#8c99a6"], ["CAPEX anualizado", 0, r.capex_anual, "#6f42c1"],
+    ["Crédito por calor", 0, -r.credito_calor, "#178a4c"]];
+  Plotly.react("g-costes", partidas.map(([n, b, s, col]) => ({type: "bar", name: n, x: ["Línea base", "Sistema nuevo"], y: [b, s],
+    marker: {color: col}, hovertemplate: "%{x}<br>" + n + ": %{y:,.0f} €<extra></extra>"})),
+  Object.assign(layoutBase(), {barmode: "relative", separators: ",.", yaxis: {title: "€/año", gridcolor: css("--line")}}), cfg);
+}
+
+let mapaPend = null, clickPuesto = false;
+function dibujarMapa() {
+  clearTimeout(mapaPend);
+  mapaPend = setTimeout(() => {
+    const z = [], txt = [];
+    for (const yv of mapa.yv) {
+      const fz = [], ft = [];
+      for (const xv of mapa.xv) {
+        try {
+          const r = H2C.evaluar(H2C.con(H2C.con(caso, mapa.x, xv), mapa.y, yv), CAT, modo);
+          const v = r[mapa.metrica];
+          fz.push(v === Infinity ? null : v);
+          ft.push(`Ahorro ${eur(r.ahorro_neto)}/a<br>CAPEX ${eur(r.capex_total)}<br>EER ${fmt2.format(r.eer_sis)} · COP abs ${r.cop_abs.toFixed(3)}<br>Dato BdC 1: ${CAL[r.cal_bdc1][0]} · absorción: ${CAL[r.cal_abs][0]}<br>${r.limitante}`);
+        } catch (e) { fz.push(null); ft.push(esc(e.message)); }
+      }
+      z.push(fz); txt.push(ft);
+    }
+    const euros = ["ahorro_neto", "capex_total"].includes(mapa.metrica);
+    Plotly.react("g-mapa", [{type: "heatmap", x: mapa.xv.map(String), y: mapa.yv.map(String), z, text: txt,
+      colorscale: "RdYlGn", reversescale: MENOS_ES_MEJOR.includes(mapa.metrica), texttemplate: euros ? "%{z:,.0f}" : "%{z:.2f}",
+      hovertemplate: `${etq(mapa.x)} %{x}<br>${etq(mapa.y)} %{y}<br>%{text}<extra></extra>`, xgap: 2, ygap: 2,
+      colorbar: {title: {text: METRICAS[mapa.metrica], side: "right"}}}],
+    Object.assign(layoutBase(), {separators: ",.", xaxis: {title: `${etq(mapa.x)} (${uni(mapa.x)})`, type: "category"},
+      yaxis: {title: `${etq(mapa.y)} (${uni(mapa.y)})`, type: "category"}, margin: {l: 70, r: 10, t: 10, b: 50}}), cfg);
+    if (!clickPuesto) {
+      document.getElementById("g-mapa").on("plotly_click", (ev) => {
+        const p = ev.points[0]; caso[mapa.x] = parseFloat(p.x); caso[mapa.y] = parseFloat(p.y);
+        construirPanel(); programar();
+      });
+      clickPuesto = true;
+    }
+  }, 30);
+}
+
+function tornado() {
+  const rutas = DATOS.sens.concat(modo === "con_recuperacion" ? DATOS.sens_rec : []);
+  const s = H2C.sensibilidad(caso, CAT, modo, rutas).reverse();
+  const y = s.map((x) => etq(x.ruta));
+  Plotly.react("g-tornado", [
+    {type: "bar", orientation: "h", name: "−20 %", y, x: s.map((x) => x.ahorro_menos - x.ahorro_ref), marker: {color: "#d9534f"},
+      hovertemplate: "%{y}<br>−20 %: %{x:,.0f} €/a<extra></extra>"},
+    {type: "bar", orientation: "h", name: "+20 %", y, x: s.map((x) => x.ahorro_mas - x.ahorro_ref), marker: {color: "#3b8bd9"},
+      hovertemplate: "%{y}<br>+20 %: %{x:,.0f} €/a<extra></extra>"}],
+  Object.assign(layoutBase(), {barmode: "overlay", separators: ",.", margin: {l: 230, r: 10, t: 10, b: 40},
+    xaxis: {title: "Δ ahorro neto (€/a)", gridcolor: css("--line"), zerolinecolor: css("--muted")}}), cfg);
+}
+
+function tablas(r) {
+  const filas = [["BdC 1", caso["eq.bdc1"], r.n_bdc1, r.cop_bdc1, r.cap_bdc1_kw, r.nom_bdc1_kw, r.cal_bdc1],
+    ["Absorción", caso["eq.abs"], r.n_abs, r.cop_abs, r.cap_abs_kw, r.nom_abs_kw, r.cal_abs]];
+  if (modo === "con_recuperacion") filas.push(["BdC R2", caso["eq.r2"], r.n_r2, r.cop_r2, r.cap_r2_kw, r.nom_r2_kw, r.cal_r2]);
+  document.getElementById("t-equipos").innerHTML = `<table><tr><th>Equipo</th><th>Modelo</th><th>Uds.</th><th>COP</th><th>Cap./ud (kW)</th><th>Nominal (kW)</th><th>Dato</th></tr>
+    ${filas.map(([e, m, n, cop, cap, nom, q]) => `<tr><td>${e}</td><td style="text-align:left;white-space:normal">${esc(m)}</td><td>${n}</td><td>${cop.toFixed(cop < 1 ? 3 : 2)}</td>
+    <td>${cap === Infinity ? "libre" : fmt1.format(cap)}</td><td>${fmt1.format(nom)}</td><td><span class="badge ${CAL[q][1]}">${CAL[q][0]}</span></td></tr>`).join("")}</table>`;
+  const d = r.diseno;
+  const circ = [["CPD → BdC 1", caso["cpd.t_sal"], caso["cpd.t_ret"], d.q_evap, d.f_cpd],
+    ["BdC 1 → generador", caso["cal.t_ida"], caso["cal.t_ret"], d.q_gen, d.f_cal],
+    ["Agua enfriada", caso["frio.t_imp"], caso["frio.t_ret"], d.q_frio, d.f_frio],
+    ["Agua de refrigeración", caso["rech.t_ent"], caso["rech.t_sal"], d.q_rej, d.f_rech]];
+  document.getElementById("t-circ").innerHTML = `<table><tr><th>Circuito</th><th>T ida</th><th>T ret.</th><th>kW</th><th>m³/h</th></tr>
+    ${circ.map(([n, a, b, q, f]) => `<tr><td>${n}</td><td>${a} °C</td><td>${b} °C</td><td>${fmt1.format(q)}</td><td>${fmt2.format(f)}</td></tr>`).join("")}</table>`;
+  const cols = [["carga", "Carga", (v) => fmt0.format(v * 100) + " %"], ["rec", "Rec.", (v) => (v ? "sí" : "no")],
+    ["peso", "Horas", (v) => fmt0.format(v * 100) + " %"], ["cop_bdc1", "COP BdC1", fmt2.format], ["cop_abs", "COP abs", (v) => v.toFixed(3)],
+    ["q_evap", "Calor CPD", fmt1.format], ["w_bdc1", "Elec. BdC1", fmt1.format], ["q_gen", "Generador", fmt1.format],
+    ["q_frio", "Frío abs.", fmt1.format], ["q_enf", "Frío enf.", fmt1.format], ["p_enf", "Elec. enf.", fmt1.format],
+    ["q_rej", "Rechazo", fmt1.format], ["q_r1", "R1", fmt1.format], ["q_r2", "R2", fmt1.format], ["q_torre", "Torre", fmt1.format],
+    ["q_adiab", "Adiab.", fmt1.format], ["p_sis", "Elec. sistema", fmt1.format], ["limitante", "Limita", (v) => v]];
+  document.getElementById("t-cargas").innerHTML = `<table><tr>${cols.map((c) => `<th>${c[1]}</th>`).join("")}</tr>
+    ${r.cargas.map((p) => `<tr>${cols.map(([k, , f]) => `<td>${f(p[k])}</td>`).join("")}</tr>`).join("")}</table>`;
+  const x = r.cargas.map((p) => fmt0.format(p.carga * 100) + " %" + (modo === "con_recuperacion" ? (p.rec ? " rec." : " sin") : ""));
+  Plotly.react("g-cargas", [
+    {type: "bar", name: "Frío absorción", x, y: r.cargas.map((p) => p.q_frio), marker: {color: "#3b8bd9"}},
+    {type: "bar", name: "Frío enfriadora", x, y: r.cargas.map((p) => p.q_enf), marker: {color: "#9ec5ec"}},
+    {type: "scatter", mode: "lines+markers", name: "Electricidad total", x, y: r.cargas.map((p) => p.p_sis + p.p_enf), yaxis: "y2", line: {color: "#e8a33d"}}],
+  Object.assign(layoutBase(), {barmode: "stack", yaxis: {title: "kW frío", gridcolor: css("--line")},
+    yaxis2: {title: "kWe", overlaying: "y", side: "right", showgrid: false}}), cfg);
+}
+
+function avisos(r) {
+  const a = [];
+  const eqs = [["BdC 1", "cal_bdc1", "eq.bdc1"], ["Absorción", "cal_abs", "eq.abs"]];
+  if (modo === "con_recuperacion") eqs.push(["BdC R2", "cal_r2", "eq.r2"]);
+  for (const [n, k, ruta] of eqs) {
+    if (r[k] >= 2) a.push(`<b>${n}</b> «${esc(caso[ruta])}»: dato ${CAL[r[k]][0]} respecto a lo publicado. Pide la curva completa antes de citar su COP.`);
+    if (r[k] === 0) a.push(`<b>${n}</b> es un equipo genérico (un solo punto, capacidad libre), no un modelo real.`);
+  }
+  if (r.cobertura_frio < 0.999) a.push(`A plena carga la absorción cubre el ${fmt0.format(r.cobertura_frio * 100)} % del frío; el resto lo pone la enfriadora existente. Limita: ${r.limitante}.`);
+  if (r.nom_adiab_kw > 0) a.push(`El rechazo supera la torre existente: adiabático nuevo de ${fmt0.format(r.nom_adiab_kw)} kW reales.`);
+  const s = caso.perfil.reduce((t, p) => t + p[1], 0);
+  if (Math.abs(s - 1) > 1e-3) a.push(`<b>El perfil de carga suma ${fmt2.format(s)}</b>; debería sumar 1.`);
+  a.push("Clima fijo: el rechazo se calcula a las temperaturas de entrada todo el año.");
+  a.push("Los importes dependen de los parámetros marcados en naranja (supuestos).");
+  document.getElementById("avisos").innerHTML = a.map((x) => `<li>${x}</li>`).join("");
+}
+
+function calcular() {
+  const err = document.getElementById("error");
+  try {
+    const r = H2C.evaluar(caso, CAT, modo);
+    const eq = H2C.equilibrios(caso, CAT, modo);
+    err.style.display = "none";
+    for (const [ruta, k] of [["eq.bdc1", "cal_bdc1"], ["eq.abs", "cal_abs"], ["eq.r2", "cal_r2"]]) {
+      const el = document.getElementById("q-" + ruta);
+      const q = ruta === "eq.r2" && modo !== "con_recuperacion" ? null : r[k];
+      if (el) { el.className = "badge " + (q == null ? "" : CAL[q][1]); el.textContent = q == null ? "" : CAL[q][0]; }
+    }
+    kpis(r, eq); sankey(r); costes(r); tornado(); tablas(r); avisos(r); dibujarMapa();
+    try { localStorage.setItem("heat2cool_caso", JSON.stringify(caso)); } catch (e) {}
+  } catch (e) { err.textContent = "No se puede calcular: " + e.message; err.style.display = "block"; }
+}
+let pend = null;
+function programar() { clearTimeout(pend); pend = setTimeout(calcular, 120); }
+
+// ---------------------------------------------------------------- cabecera
+document.getElementById("modos").innerHTML = Object.entries(DATOS.modos).map(([k, v]) =>
+  `<button data-m="${k}" class="${k === modo ? "on" : ""}">${v}</button>`).join("");
+document.querySelectorAll("#modos button").forEach((b) => b.onclick = () => {
+  modo = b.dataset.m; document.querySelectorAll("#modos button").forEach((x) => x.classList.toggle("on", x === b)); calcular();
+});
+document.getElementById("b-reset").onclick = () => { caso = JSON.parse(JSON.stringify(DATOS.caso)); construirPanel(); calcular(); };
+document.getElementById("b-exp").onclick = () => {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(caso, null, 2)], {type: "application/json"}));
+  a.download = "heat2cool_caso.json"; a.click();
+};
+document.getElementById("b-imp").onchange = (e) => {
+  const f = e.target.files[0]; if (!f) return;
+  f.text().then((t) => { caso = Object.assign(JSON.parse(JSON.stringify(DATOS.caso)), JSON.parse(t)); construirPanel(); calcular(); });
+};
+document.getElementById("b-tema").onclick = () => {
+  const oscuro = matchMedia("(prefers-color-scheme: dark)").matches;
+  const actual = document.documentElement.dataset.theme || (oscuro ? "dark" : "light");
+  document.documentElement.dataset.theme = actual === "dark" ? "light" : "dark";
+  try { localStorage.setItem("heat2cool_tema", document.documentElement.dataset.theme); } catch (e) {}
+  calcular();
+};
+construirPanel(); construirCtlMapa(); calcular();
+</script>
+</body>
+</html>

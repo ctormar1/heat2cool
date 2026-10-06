@@ -1,0 +1,53 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "heat2cool: calcular los dos modos",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/simular.py",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "env": { "PYTHONIOENCODING": "utf-8" }
+    },
+    {
+      "name": "heat2cool: solo sin recuperación",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/simular.py",
+      "args": ["--modo", "sin"],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "env": { "PYTHONIOENCODING": "utf-8" }
+    },
+    {
+      "name": "heat2cool: solo con recuperación",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/simular.py",
+      "args": ["--modo", "con"],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "env": { "PYTHONIOENCODING": "utf-8" }
+    },
+    {
+      "name": "heat2cool: regenerar Excel de entrada",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/simular.py",
+      "args": ["--plantilla"],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "env": { "PYTHONIOENCODING": "utf-8" }
+    },
+    {
+      "name": "heat2cool: tests",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "pytest",
+      "args": ["-v"],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal"
+    }
+  ]
+}

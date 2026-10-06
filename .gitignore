@@ -1,0 +1,18 @@
+# --- datos: NO se suben ---
+data/
+catalogo/curvas.csv
+v1/
+salidas/
+*.xlsx
+*.json
+!.vscode/launch.json
+.vscode/settings.json
+tools/build_matriz.py
+tools/fit_bdc.py
+
+# --- Python / herramientas ---
+__pycache__/
+*.pyc
+.pytest_cache/
+.claude/
+~$*

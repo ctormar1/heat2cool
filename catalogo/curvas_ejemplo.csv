@@ -1,0 +1,13 @@
+tipo,equipo,t_fuente_sal,t_caliente_sal,t_gen_ent,t_frio_sal,t_refrig_ent,q_kw,cop,origen,usar,fuente
+bdc,Genérico BdC (COP 4 a 50→90),50.0,90.0,,,,,4.0,generico,1,genérico
+bdc,Genérico BdC CO2 (COP 4 a 30→90),30.0,90.0,,,,,4.0,generico,1,genérico
+absorcion,"Genérica absorción (COP 0,70 a 90/7/30)",,,90.0,7.0,30.0,,0.7,generico,1,genérico
+bdc,Ejemplo BdC alta T 200 kW,40.0,80.0,,,,215.0,4.3,ejemplo,1,"ficticio, valores típicos de catálogo"
+bdc,Ejemplo BdC alta T 200 kW,40.0,90.0,,,,200.0,3.6,ejemplo,1,"ficticio, valores típicos de catálogo"
+bdc,Ejemplo BdC alta T 200 kW,50.0,90.0,,,,225.0,4.4,ejemplo,1,"ficticio, valores típicos de catálogo"
+bdc,Ejemplo BdC CO2 250 kW,25.0,80.0,,,,260.0,3.6,ejemplo,1,"ficticio, valores típicos de catálogo"
+bdc,Ejemplo BdC CO2 250 kW,30.0,90.0,,,,250.0,3.3,ejemplo,1,"ficticio, valores típicos de catálogo"
+absorcion,Ejemplo absorción 150 kW,,,88.0,7.0,31.0,150.0,0.7,ejemplo,1,"ficticio, valores típicos de catálogo"
+absorcion,Ejemplo absorción 150 kW,,,80.0,7.0,31.0,115.0,0.67,ejemplo,1,"ficticio, valores típicos de catálogo"
+absorcion,Ejemplo absorción 150 kW,,,95.0,9.0,29.0,180.0,0.74,ejemplo,1,"ficticio, valores típicos de catálogo"
+absorcion,Ejemplo absorción 50 kW,,,88.0,7.0,31.0,52.0,0.7,ejemplo,1,"ficticio, valores típicos de catálogo"
