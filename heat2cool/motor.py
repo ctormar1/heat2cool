@@ -43,6 +43,34 @@ def _recta(xs, ys):
     return my - b * mx, b
 
 
+def _ajuste_eta(xs, ys):
+    """η(salto) = a + b·u + c·u², u = salto − centro. Parábola si hay ≥4 saltos distintos en ≥20 K
+    (curvas medidas: η tiene un máximo); si no, recta (c = 0) o constante."""
+    m = _media(xs)
+    us = [x - m for x in xs]
+    distintos = len({round(x) for x in xs})
+    if distintos >= 4 and max(xs) - min(xs) >= 20.0:
+        s = [sum(u ** k for u in us) for k in range(5)]
+        t = [sum(y * u ** k for u, y in zip(us, ys)) for k in range(3)]
+        A = [[s[0], s[1], s[2]], [s[1], s[2], s[3]], [s[2], s[3], s[4]]]
+        det = _det3(A)
+        if abs(det) > 1e-9:
+            sol = []
+            for k in range(3):
+                Ak = [fila[:] for fila in A]
+                for i in range(3):
+                    Ak[i][k] = t[i]
+                sol.append(_det3(Ak) / det)
+            return m, sol[0], sol[1], sol[2]
+    a, b = _recta(us, ys)
+    return m, a, b, 0.0
+
+
+def _det3(A):
+    return (A[0][0] * (A[1][1] * A[2][2] - A[1][2] * A[2][1]) - A[0][1] * (A[1][0] * A[2][2] - A[1][2] * A[2][0])
+            + A[0][2] * (A[1][0] * A[2][1] - A[1][1] * A[2][0]))
+
+
 # ================================================================== bomba de calor
 def _bdc_salto(c, ts, tk):
     return max((tk + c["bdc.ap_cond"]) - (ts - c["bdc.ap_evap"]), 5.0)
@@ -57,7 +85,7 @@ def ajustar_bdc(c, eq):
     pts = eq["puntos"]
     saltos = [_bdc_salto(c, p["ts"], p["tk"]) for p in pts]
     etas = [p["cop"] / _bdc_carnot(c, p["ts"], p["tk"]) for p in pts]
-    a, b = _recta(saltos, etas)
+    s_c, a, b, cc = _ajuste_eta(saltos, etas)
     pq = [(s, p["q"]) for s, p in zip(saltos, pts) if p.get("q")]
     if pq:
         qa, qb = _recta([x[0] for x in pq], [x[1] for x in pq])
@@ -67,7 +95,7 @@ def ajustar_bdc(c, eq):
         k = min(max(k, -0.03), 0.01)
     else:
         s_ref, q_ref, k = _media(saltos), INF, 0.0
-    return {"tipo": "bdc", "origen": eq["origen"], "a": a, "b": b,
+    return {"tipo": "bdc", "origen": eq["origen"], "a": a, "b": b, "c": cc, "s_c": s_c,
             "s_min": min(saltos), "s_max": max(saltos),
             "ts_min": min(p["ts"] for p in pts), "ts_max": max(p["ts"] for p in pts),
             "tk_min": min(p["tk"] for p in pts), "tk_max": max(p["tk"] for p in pts),
@@ -77,8 +105,8 @@ def ajustar_bdc(c, eq):
 def bdc_en(c, m, ts, tk):
     """COP, capacidad por unidad (kW calor) y nivel de calidad a T fuente salida ts y T caliente salida tk."""
     s = _bdc_salto(c, ts, tk)
-    s_cl = min(max(s, m["s_min"]), m["s_max"])
-    eta = m["a"] + m["b"] * s_cl
+    u = min(max(s, m["s_min"]), m["s_max"]) - m["s_c"]
+    eta = max(m["a"] + m["b"] * u + m["c"] * u * u, 0.05)
     cop = max(eta * _bdc_carnot(c, ts, tk), 1.05)
     cap = INF if m["q_ref"] == INF else m["q_ref"] * max(1.0 + m["k"] * (s - m["s_ref"]), 0.1)
     d = max(_dist(ts, m["ts_min"], m["ts_max"]), _dist(tk, m["tk_min"], m["tk_max"]))
@@ -165,6 +193,15 @@ def modelos(c, cat):
     return {"bdc1": get("eq.bdc1", "bdc"), "abs": get("eq.abs", "absorcion"), "r2": get("eq.r2", "bdc")}
 
 
+def demanda_r1(c):
+    """kW de R1 si está activado (casos antiguos sin el interruptor: activado)."""
+    return c["rec.r1_kw"] if c.get("rec.r1_on", 1.0) >= 0.5 else 0.0
+
+
+def demanda_r2(c):
+    return c["rec.r2_kw"] if c.get("rec.r2_on", 1.0) >= 0.5 else 0.0
+
+
 def _n_auto(fijo, requerido, cap):
     if fijo and fijo > 0:
         return int(fijo)
@@ -183,7 +220,7 @@ def dimensionar(c, ms):
     q_gen_req = q_frio_req / ab["cop"] if ab["cop"] > 0 else 0.0
     n_hp = _n_auto(c["n.bdc1"], q_gen_req, hp["cap"])
     n_ab = _n_auto(c["n.abs"], q_frio_req, ab["cap"])
-    n_r2 = _n_auto(c["n.r2"], c["rec.r2_kw"], r2["cap"])
+    n_r2 = _n_auto(c["n.r2"], demanda_r2(c), r2["cap"]) if demanda_r2(c) > 0 else 0
     return {"hp": hp, "ab": ab, "r2": r2, "n_hp": n_hp, "n_ab": n_ab, "n_r2": n_r2,
             "q_gen_req": q_gen_req, "q_frio_req": q_frio_req}
 
@@ -224,8 +261,8 @@ def punto(c, d, carga, rec_on):
 
     q_r1 = q_r2 = q_r2_ext = w_r2 = 0.0
     if rec_on:
-        q_r1 = min(c["rec.r1_kw"], q_rej)
-        q_r2 = min(c["rec.r2_kw"], (q_rej - q_r1) * r2["cop"] / (r2["cop"] - 1.0), d["n_r2"] * r2["cap"])
+        q_r1 = min(demanda_r1(c), q_rej)
+        q_r2 = min(demanda_r2(c), (q_rej - q_r1) * r2["cop"] / (r2["cop"] - 1.0), d["n_r2"] * r2["cap"])
         w_r2 = q_r2 / r2["cop"]
         q_r2_ext = q_r2 - w_r2
     q_dis = q_rej - q_r1 - q_r2_ext
@@ -246,13 +283,14 @@ def punto(c, d, carga, rec_on):
     eer = enf_eer(c, c["frio.t_imp"])
     q_res = max(dem - q_frio, 0.0)
     p_enf = q_res / eer
-    agua_l_h = agua_torre_l_kwh(c) * (q_torre + q_res + p_enf) + c["rech.adiab_l_kwh"] * q_adiab
+    agua_sis_l_h = agua_torre_l_kwh(c) * q_torre + c["rech.adiab_l_kwh"] * q_adiab
+    agua_l_h = agua_sis_l_h + agua_torre_l_kwh(c) * (q_res + p_enf)
     return {"carga": carga, "rec": rec_on, "limitante": limitante, "cop_bdc1": cop_hp, "cop_abs": cop_ab,
             "cop_r2": r2["cop"], "eer_enf": eer, "plr_bdc1": plr_hp, "plr_abs": plr_ab,
             "q_cpd_disp": q_src, "q_evap": q_evap, "w_bdc1": w_hp, "q_gen": q_gen, "q_frio": q_frio, "q_rej": q_rej,
             "q_r1": q_r1, "q_r2": q_r2, "q_r2_ext": q_r2_ext, "w_r2": w_r2, "q_dis": q_dis, "q_torre": q_torre,
             "q_adiab": q_adiab, "q_enf": q_res, "p_enf": p_enf, "p_bombas": p_bombas, "p_aux_abs": p_aux,
-            "p_vent": p_vent, "p_dc_ahorro": p_dc, "p_sis": p_sis, "agua_l_h": agua_l_h,
+            "p_vent": p_vent, "p_dc_ahorro": p_dc, "p_sis": p_sis, "agua_l_h": agua_l_h, "agua_sis_l_h": agua_sis_l_h,
             "f_cpd": f_cpd, "f_cal": f_cal, "f_frio": f_frio, "f_rech": f_rech}
 
 
@@ -269,11 +307,11 @@ def capex(c, d, ms, rec_on, p_dis):
         nom_ab = d["q_frio_req"] / max(f, 0.3)
     else:
         nom_ab = d["n_ab"] * ab["q_nom"]
-    nom_r2 = c["rec.r2_kw"] if r2["q_nom"] == INF else d["n_r2"] * r2["q_nom"]
+    nom_r2 = demanda_r2(c) if r2["q_nom"] == INF else d["n_r2"] * r2["q_nom"]
     c_hp = c["eco.capex_bdc"] * nom_hp
     c_ab = c["eco.capex_abs"] * nom_ab
     c_adiab = c["eco.capex_adiab"] * p_dis["q_adiab"]
-    c_r1 = c["eco.capex_r1"] * c["rec.r1_kw"] if rec_on else 0.0
+    c_r1 = c["eco.capex_r1"] * demanda_r1(c) if rec_on else 0.0
     c_r2 = c["eco.capex_r2"] * nom_r2 if rec_on else 0.0
     equipos = c_hp + c_ab + c_adiab + c_r1 + c_r2
     return {"capex_bdc1": c_hp, "capex_abs": c_ab, "capex_adiab": c_adiab, "capex_r1": c_r1, "capex_r2": c_r2,
@@ -293,7 +331,7 @@ def evaluar(c, cat, modo):
     h = c["cpd.horas"]
 
     acc = {k: 0.0 for k in ("e_sis", "e_enf", "agua", "frio", "calor", "rej", "adiab", "w_bdc1", "w_r2",
-                            "bombas", "vent", "aux", "dc")}
+                            "bombas", "vent", "aux", "dc", "cpd", "evap", "agua_sis")}
     cargas = []
     for carga, peso in c["perfil"]:
         for w_sub, on in subs:
@@ -316,6 +354,9 @@ def evaluar(c, cat, modo):
             acc["vent"] += w * p["p_vent"] * h
             acc["aux"] += w * p["p_aux_abs"] * h
             acc["dc"] += w * p["p_dc_ahorro"] * h
+            acc["cpd"] += w * p["q_cpd_disp"] * h
+            acc["evap"] += w * p["q_evap"] * h
+            acc["agua_sis"] += w * p["agua_sis_l_h"] * h / 1000.0
 
     cx = capex(c, d, ms, rec_modo, p_dis)
     c_elec = (acc["e_sis"] + acc["e_enf"]) * c["eco.elec"]
@@ -335,9 +376,23 @@ def evaluar(c, cat, modo):
     ahorro_op = j_base - (c_elec + c_agua + c_mant - credito)
     e_tot = acc["e_sis"] + acc["e_enf"]
 
+    # ---- revalorización del calor del CPD (lo que importa al sitio que lo acoge)
+    util = acc["frio"] + acc["calor"]                      # kWh útiles entregados al sitio
+    coste_sis = capex_anual + c_mant + acc["e_sis"] * c["eco.elec"] + acc["agua_sis"] * c["eco.agua"]
+    valor_frio = (c["eco.elec"] / eer + agua_torre_l_kwh(c) * (1 + 1 / eer) / 1000.0 * c["eco.agua"]) * 1000.0
+    valor_calor = c["rec.precio_calor"] / c["rec.rend_caldera"] * 1000.0
+    rev = {"calor_residual_mwh": acc["cpd"] / 1e3, "calor_revalorizado_mwh": acc["evap"] / 1e3,
+           "frac_revalorizado": acc["evap"] / acc["cpd"] if acc["cpd"] > 0 else 0.0,
+           "erf": acc["evap"] / (acc["cpd"] * c["cpd.pue"]) if acc["cpd"] > 0 else 0.0,
+           "util_mwh": util / 1e3, "coste_sis": coste_sis,
+           "coste_util": coste_sis / util * 1000.0 if util > 0 else INF,      # €/MWh útil
+           "valor_frio": valor_frio, "valor_calor": valor_calor,             # €/MWh que le cuesta hoy al sitio
+           "valor_util": (acc["frio"] * valor_frio + acc["calor"] * valor_calor) / util if util > 0 else 0.0,
+           "agua_sis_m3": acc["agua_sis"]}
+
     r = {"modo": modo,
          "cop_bdc1": d["hp"]["cop"], "cop_abs": d["ab"]["cop"], "cop_r2": d["r2"]["cop"], "eer_enf": eer,
-         "cal_bdc1": d["hp"]["nivel"], "cal_abs": d["ab"]["nivel"], "cal_r2": d["r2"]["nivel"] if rec_modo else 0,
+         "cal_bdc1": d["hp"]["nivel"], "cal_abs": d["ab"]["nivel"], "cal_r2": d["r2"]["nivel"] if rec_modo and d["n_r2"] > 0 else 0,
          "n_bdc1": d["n_hp"], "n_abs": d["n_ab"], "n_r2": d["n_r2"] if rec_modo else 0,
          "cap_bdc1_kw": d["hp"]["cap"], "cap_abs_kw": d["ab"]["cap"], "cap_r2_kw": d["r2"]["cap"],
          "limitante": p_dis["limitante"], "frio_dis_kw": p_dis["q_frio"], "cobertura_frio": p_dis["q_frio"] / dem,
@@ -353,6 +408,7 @@ def evaluar(c, cat, modo):
          "J": j, "J_base": j_base, "ahorro_neto": j_base - j, "ahorro_operacion": ahorro_op,
          "retorno_anos": cx["capex_total"] / ahorro_op if ahorro_op > 0 else INF}
     r.update(cx)
+    r.update(rev)
     r["diseno"] = p_dis
     r["cargas"] = cargas
     return r

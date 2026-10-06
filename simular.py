@@ -5,7 +5,8 @@
     python simular.py --plantilla        regenera entrada.xlsx con los valores por defecto y sale
     python simular.py --sin-barrido      solo el caso de la hoja Entradas (más rápido)
 
-Salidas en salidas/: heat2cool_sin_recuperacion.xlsx, heat2cool_con_recuperacion.xlsx y heat2cool_dashboard.html.
+Salidas en salidas/: heat2cool_sin_recuperacion.xlsx, heat2cool_con_recuperacion.xlsx, heat2cool_dashboard.html (sencillo)
+y heat2cool_dashboard_avanzado.html.
 """
 from __future__ import annotations
 
@@ -48,6 +49,11 @@ def main():
             return
         print("Calculo con los valores por defecto. Edita el Excel y vuelve a ejecutar.\n")
 
+    try:
+        if entrada_xlsx.actualizar_catalogo(entrada, cat):
+            print(f"{entrada.name} actualizado: parámetros nuevos y desplegables de equipos (tus valores no cambian).\n")
+    except PermissionError:
+        print(f"(Aviso: {entrada.name} está abierto; no actualizo sus desplegables de equipos.)\n")
     caso, barrido_vars = entrada_xlsx.leer(entrada)
     if a.sin_barrido:
         barrido_vars = []
@@ -67,25 +73,43 @@ def main():
             sys.exit(f"\n✖ No puedo escribir {ruta}: ciérralo en Excel y vuelve a ejecutar.")
 
         print(f"━━━ {MODOS[modo]} ━━━")
-        print(f"  Ahorro neto   {_eur(res['ahorro_neto'])}/año    CAPEX {_eur(res['capex_total'])}    "
-              f"retorno {estudio.fmt_retorno(res['retorno_anos'])}")
+        print(f"  Calor del CPD revalorizado {res['calor_revalorizado_mwh']:,.0f} MWh/año "
+              f"({res['frac_revalorizado']:.0%} del calor residual) · ERF {res['erf']:.2f}")
+        print(f"  Energía útil para el sitio {res['util_mwh']:,.0f} MWh/año (frío {res['frio_mwh']:,.0f} + "
+              f"calor {res['calor_rec_mwh']:,.0f}) · cuesta {res['coste_util']:,.0f} €/MWh "
+              f"(hoy al sitio le cuesta {res['valor_util']:,.0f} €/MWh)")
         print(f"  COP BdC 1 {res['cop_bdc1']:.2f} ({CALIDAD[res['cal_bdc1']]}) · "
               f"COP absorción {res['cop_abs']:.3f} ({CALIDAD[res['cal_abs']]})")
-        print(f"  Limita a plena carga: {res['limitante']} · cubre el {res['cobertura_frio']:.0%} del frío")
-        if equil["eer_equilibrio"]:
-            print(f"  Empata si la enfriadora existente tuviera EER {equil['eer_equilibrio']:.2f} "
-                  f"(supuesto {caso['enf.eer_ref']})")
+        print(f"  CAPEX {_eur(res['capex_total'])} · frente a la enfriadora: {_eur(res['ahorro_neto'])}/año")
         if filas:
-            pos = sum(f["ahorro_neto"] > 0 for f in filas)
             m, p = filas[0], filas[-1]
             vs = lambda f: ", ".join(f"{r}={f[r]:g}" for r, _ in barrido_vars)
-            print(f"  Barrido: {len(filas)} escenarios, {pos} con ahorro positivo")
-            print(f"    mejor: {vs(m)} → {_eur(m['ahorro_neto'])}/año")
-            print(f"    peor:  {vs(p)} → {_eur(p['ahorro_neto'])}/año")
+            print(f"  Barrido: {len(filas)} escenarios, ordenados por coste por MWh útil")
+            print(f"    más barato: {vs(m)} → {m['coste_util']:,.0f} €/MWh · {m['calor_revalorizado_mwh']:,.0f} MWh revalorizados")
+            print(f"    más caro:   {vs(p)} → {p['coste_util']:,.0f} €/MWh · {p['calor_revalorizado_mwh']:,.0f} MWh revalorizados")
         print(f"  → {ruta}\n")
 
-    html = web.construir(salida / "heat2cool_dashboard.html", cat, caso)
-    print(f"Dashboard: {html}")
+    opciones = {"max_nivel": 2, "genericos": False, "t_gen": estudio.T_GEN_OPT}
+    sols = estudio.soluciones(caso, cat, max_nivel=opciones["max_nivel"], genericos=opciones["genericos"])
+    ruta_opt = salida / "heat2cool_optimizacion.xlsx"
+    try:
+        salida_xlsx.escribir_optimizacion(ruta_opt, caso, sols, opciones)
+    except PermissionError:
+        sys.exit(f"\n✖ No puedo escribir {ruta_opt}: ciérralo en Excel y vuelve a ejecutar.")
+    print(f"━━━ Optimización para este sitio ({len(sols)} soluciones viables) ━━━")
+    for k, (nombre, _) in estudio.OBJETIVOS.items():
+        top = estudio.ordenar(sols, k)[:1]
+        if top:
+            m = top[0]
+            print(f"  {nombre}: {MODOS[m['modo']]}, {m['cal.t_ida']:g} °C, {m['n_bdc1']}× {m['eq.bdc1']} + "
+                  f"{m['n_abs']}× {m['eq.abs']}" + (f" + {m['n_r2']}× {m['eq.r2']}" if m["eq.r2"] else "")
+                  + f" → {m['coste_util']:,.0f} €/MWh, {m['calor_revalorizado_mwh']:,.0f} MWh")
+    print(f"  → {ruta_opt}\n")
+
+    html = web.construir(salida / "heat2cool_dashboard.html", cat, caso, vista="simple")
+    html_av = web.construir(salida / "heat2cool_dashboard_avanzado.html", cat, caso, vista="avanzada")
+    print(f"Dashboard sencillo: {html}")
+    print(f"Dashboard avanzado: {html_av}")
     print(f"Listo en {time.time() - t0:.1f} s.")
     if not a.no_abrir:
         webbrowser.open(html.as_uri())

@@ -84,6 +84,53 @@ def escribir_plantilla(ruta: str | Path, cat: dict, caso: dict | None = None, ba
     wb.save(ruta)
 
 
+def _anadir_parametros(wb) -> bool:
+    """Añade al final de la hoja Entradas los parámetros que no estaban cuando se creó el Excel."""
+    ws = wb["Entradas"]
+    hay = {f[6] for f in ws.iter_rows(min_row=2, values_only=True) if len(f) > 6}
+    faltan = [p for p in P.PARAMS if p[1] not in hay]
+    for bloque, ruta_p, etq, valor, uni, origen, nota in faltan:
+        ws.append([bloque, etq, valor, uni, origen, nota, ruta_p])
+        r = ws.max_row
+        ws.cell(r, 3).fill = AZUL
+        if origen == P.SUP:
+            ws.cell(r, 5).font = Font(color="C65911", bold=True)
+        ws.cell(r, 7).font = Font(color="A6A6A6")
+    return bool(faltan)
+
+
+def actualizar_catalogo(ruta: str | Path, cat: dict) -> bool:
+    """Rehace la hoja Catálogo y los desplegables de Equipos con el catálogo actual, sin tocar ningún valor.
+    Devuelve True si había equipos nuevos."""
+    wb = load_workbook(ruta)
+    if "Catálogo" not in wb.sheetnames or "Equipos" not in wb.sheetnames:
+        return False
+    nuevo = _anadir_parametros(wb)
+    hc = wb["Catálogo"]
+    bdc = [n for n, e in cat.items() if e["tipo"] == "bdc"]
+    ab = [n for n, e in cat.items() if e["tipo"] == "absorcion"]
+    actuales = {v for fila in hc.iter_rows(min_row=2, values_only=True) for v in fila if v}
+    if set(bdc + ab) <= actuales:
+        if nuevo:
+            wb.save(ruta)
+        return nuevo
+    hc.delete_rows(2, hc.max_row)
+    for i in range(max(len(bdc), len(ab))):
+        hc.append([bdc[i] if i < len(bdc) else None, ab[i] if i < len(ab) else None])
+    ws = wb["Equipos"]
+    ws.data_validations.dataValidation = []
+    listas = {"bdc": f"=Catálogo!$A$2:$A${len(bdc) + 1}", "absorcion": f"=Catálogo!$B$2:$B${len(ab) + 1}"}
+    tipos = {e[0]: e[2] for e in P.EQUIPOS}
+    for fila in range(2, ws.max_row + 1):
+        ruta_e = ws.cell(fila, 4).value
+        if ruta_e in tipos:
+            dv = DataValidation(type="list", formula1=listas[tipos[ruta_e]], allow_blank=False)
+            ws.add_data_validation(dv)
+            dv.add(ws.cell(fila, 2))
+    wb.save(ruta)
+    return True
+
+
 def leer(ruta: str | Path):
     """Devuelve (caso, barrido) a partir del Excel de entrada."""
     wb = load_workbook(ruta, data_only=True)

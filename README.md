@@ -24,16 +24,37 @@ python simular.py            # 1ª vez: crea entrada.xlsx y calcula con los valo
 |---|---|
 | `heat2cool_sin_recuperacion.xlsx` | Solo frío |
 | `heat2cool_con_recuperacion.xlsx` | Frío + R1 (precalentar red) + R2 (BdC a 90 °C) |
-| `heat2cool_dashboard.html` | Dashboard interactivo, sin Python ni internet |
+| `heat2cool_optimizacion.xlsx` | Top 5 de soluciones para la situación del cliente según cada objetivo, y todas las soluciones viables |
+| `heat2cool_dashboard.html` | Dashboard **sencillo**: 8 deslizadores, veredicto en una frase, flujos de energía y costes |
+| `heat2cool_dashboard_avanzado.html` | Dashboard **avanzado**: todos los parámetros, mapa de escenarios, sensibilidad, tablas |
 
 Cada Excel tiene las hojas Resumen, Balance, Equipos, Barrido (**todos** los escenarios con ranking y filtros),
 Mapas, Anual, Costes, Sensibilidad (tornado), Avisos y Entradas (copia exacta de lo que metiste), con gráficos de Excel.
 
 Opciones: `--modo sin|con|ambos`, `--sin-barrido`, `--plantilla` (regenera el Excel de entrada), `--no-abrir`.
 
+## Qué mide
+
+El objetivo es **revalorizar el calor residual del CPD** en frío y calor para el sitio que lo acoge. Indicadores principales:
+
+- **Calor del CPD revalorizado** (MWh/año y % del calor residual).
+- **Coste por MWh útil** = (CAPEX anualizado + mantenimiento + electricidad + agua del sistema nuevo) / (frío + calor
+  entregados al sitio), comparado con lo que le cuesta hoy al sitio ese MWh (frío con su enfriadora, calor con caldera).
+- **ERF del CPD** (Energy Reuse Factor, EN 50600-4-6) = calor reutilizado / energía total del CPD (calor × PUE).
+
+El ahorro frente a seguir con la enfriadora se mantiene como dato secundario.
+
+## Optimizador
+
+Con la situación del cliente fija (calor y temperaturas del CPD, demanda de frío y calor del sitio, temperaturas, precios)
+prueba todas las combinaciones de BdC 1, absorción, con/sin recuperación, BdC R2 y T al generador (75-95 °C), descartando
+equipos fuera de rango (>10 K de sus datos) y genéricos. Da el top 5 para cada objetivo: menor coste por MWh útil, más
+calor revalorizado, mayor ERF y mayor ahorro. Sale en `salidas/heat2cool_optimizacion.xlsx` y en la tarjeta
+*Optimizar para este sitio* del dashboard (botón *Usar* para cargar una solución).
+
 ## Dashboard HTML
 
-`salidas/heat2cool_dashboard.html` es un único fichero (≈4,5 MB) con el motor de cálculo en JavaScript, el catálogo y
+Los dos dashboards son el mismo fichero con distinta vista inicial (se cambia con el botón *Sencillo / Avanzado* o con `?vista=avanzada` en la URL). Cada uno es un único fichero (≈4,5 MB) con el motor de cálculo en JavaScript, el catálogo y
 Plotly dentro. Se abre con doble clic y recalcula al instante al cambiar cualquier entrada. Para integrarlo en otra web:
 
 ```html

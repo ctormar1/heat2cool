@@ -32,7 +32,8 @@ def datos(cat: dict, caso: dict) -> dict:
             "modos": P.MODOS, "sens": P.SENSIBILIDAD, "sens_rec": P.SENSIBILIDAD_REC, "caso": caso}
 
 
-def construir(ruta: str | Path, cat: dict, caso: dict, plotly_en_linea: bool = True) -> Path:
+def construir(ruta: str | Path, cat: dict, caso: dict, plotly_en_linea: bool = True, vista: str = "simple") -> Path:
+    """vista: 'simple' o 'avanzada' (la que se ve al abrir; desde la página se puede cambiar, o con ?vista=...)."""
     html = (WEB / "plantilla.html").read_text(encoding="utf-8")
     motor = (WEB / "motor.js").read_text(encoding="utf-8")
     if plotly_en_linea:
@@ -44,6 +45,7 @@ def construir(ruta: str | Path, cat: dict, caso: dict, plotly_en_linea: bool = T
                             '<script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js"></script>')
     html = (html.replace("/*__PLOTLY__*/", plotly)
                 .replace("/*__MOTOR__*/", motor)
+                .replace('/*__VISTA__*/"simple"', json.dumps(vista))
                 .replace("/*__DATOS__*/", _json_seguro(datos(cat, caso))))
     ruta = Path(ruta)
     ruta.parent.mkdir(parents=True, exist_ok=True)

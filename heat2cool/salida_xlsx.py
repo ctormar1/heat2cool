@@ -24,7 +24,10 @@ ROJO_VERDE = dict(start_type="min", start_color="63BE7B", mid_type="percentile",
                   end_type="max", end_color="F8696B")
 
 NOMBRES = {  # columna -> (cabecera, formato)
-    "ranking": ("Ranking", "0"), "cop_bdc1": ("COP BdC 1", "0.00"), "cop_abs": ("COP absorción", "0.000"),
+    "ranking": ("Ranking", "0"),
+    "calor_revalorizado_mwh": ("CALOR CPD REVALORIZADO (MWh/a)", "#,##0"), "frac_revalorizado": ("% del calor residual", "0%"),
+    "erf": ("ERF del CPD", "0.00"), "util_mwh": ("Energía útil al sitio (MWh/a)", "#,##0"),
+    "coste_util": ("COSTE POR MWh ÚTIL (€/MWh)", "#,##0"), "valor_util": ("Coste actual del sitio (€/MWh)", "#,##0"), "cop_bdc1": ("COP BdC 1", "0.00"), "cop_abs": ("COP absorción", "0.000"),
     "cop_r2": ("COP BdC R2", "0.00"), "eer_enf": ("EER enfriadora", "0.00"), "cal_bdc1": ("Calidad BdC 1", "0"),
     "cal_abs": ("Calidad absorción", "0"), "cal_r2": ("Calidad R2", "0"), "n_bdc1": ("Nº BdC 1", "0"),
     "n_abs": ("Nº absorción", "0"), "n_r2": ("Nº BdC R2", "0"), "limitante": ("Qué limita a plena carga", "@"),
@@ -97,10 +100,25 @@ def _hoja_resumen(ws, modo, caso, res, equil):
     ws["A1"].font = TIT
     ws["A2"] = "Caso de la hoja Entradas. Los importes dependen de los parámetros [SUPUESTO]."
     ws["A2"].font = Font(italic=True, color="808080")
-    ws["A4"] = "Indicadores clave"
+    ws["A4"] = "Revalorización del calor del CPD"
     ws["A4"].font = SUB
     f = _tabla(ws, 5, [
-        ("AHORRO NETO anual frente a línea base (€/a)", res["ahorro_neto"], "#,##0"),
+        ("CALOR DEL CPD REVALORIZADO (MWh/a)", res["calor_revalorizado_mwh"], "#,##0"),
+        ("% del calor residual del CPD que se aprovecha", res["frac_revalorizado"], "0%"),
+        ("ERF del CPD (calor reutilizado / energía total del CPD)", res["erf"], "0.00"),
+        ("Energía útil entregada al sitio: frío + calor (MWh/a)", res["util_mwh"], "#,##0"),
+        ("   de ella, frío (MWh/a)", res["frio_mwh"], "#,##0"),
+        ("   de ella, calor (MWh/a)", res["calor_rec_mwh"], "#,##0"),
+        ("COSTE POR MWh ÚTIL (€/MWh)", res["coste_util"], "#,##0"),
+        ("Lo que le cuesta hoy al sitio ese MWh (€/MWh)", res["valor_util"], "#,##0"),
+        ("   frío con su enfriadora (€/MWh)", res["valor_frio"], "#,##0"),
+        ("   calor con su caldera (€/MWh)", res["valor_calor"], "#,##0"),
+    ])
+    for fila in (5, 7, 11):
+        ws.cell(fila, 2).font = Font(bold=True, size=13, color="1F4E78")
+    ws.cell(f + 1, 1, "Comparación con seguir enfriando como ahora").font = SUB
+    f = _tabla(ws, f + 2, [
+        ("Ahorro neto anual frente a línea base (€/a)", res["ahorro_neto"], "#,##0"),
         ("CAPEX total (€)", res["capex_total"], "#,##0"),
         ("Retorno simple (años)", res["retorno_anos"], "0.0"),
         ("Coste anual J sistema (€/a)", res["J"], "#,##0"),
@@ -114,7 +132,6 @@ def _hoja_resumen(ws, modo, caso, res, equil):
         ("EER de la enfriadora existente con el que se empata", equil["eer_equilibrio"], "0.00"),
         ("Precio de electricidad con el que se empata (€/kWh)", equil["elec_equilibrio"], "0.000"),
     ])
-    ws["B5"].font = Font(bold=True, size=13, color="00B050" if res["ahorro_neto"] > 0 else "C00000")
 
     # tabla traspuesta (filas = base / nuevo, columnas = partidas) para que cada partida sea una serie apilada
     ws["D4"] = "Coste anual (€/a)"
@@ -225,9 +242,11 @@ def _hoja_barrido(wb, rutas, filas):
             if k.startswith("cal_"):
                 _calidad(c, fila[k])
     n = len(filas)
-    for k in ("ahorro_neto", "eer_sis"):
+    for k in ("ahorro_neto", "eer_sis", "calor_revalorizado_mwh", "erf"):
         letra = get_column_letter(cols.index(k) + 1)
         ws.conditional_formatting.add(f"{letra}2:{letra}{n + 1}", ColorScaleRule(**VERDE_ROJO))
+    letra = get_column_letter(cols.index("coste_util") + 1)
+    ws.conditional_formatting.add(f"{letra}2:{letra}{n + 1}", ColorScaleRule(**ROJO_VERDE))
     for j in range(1, len(cols) + 1):
         ws.column_dimensions[get_column_letter(j)].width = 14
     for k in ("limitante", "cal_bdc1", "cal_abs", "cal_r2"):
@@ -257,7 +276,8 @@ def _hoja_mapas(wb, rutas, filas):
     ys = sorted({f[y_r] for f in filas})
     nota = "" if len(rutas) == 2 else "  (mejor valor sobre las demás variables)"
     fila0 = 1
-    for clave, fmt, mejor_alto in [("ahorro_neto", "#,##0", True), ("eer_sis", "0.00", True),
+    for clave, fmt, mejor_alto in [("coste_util", "#,##0", False), ("calor_revalorizado_mwh", "#,##0", True),
+                                   ("erf", "0.00", True), ("ahorro_neto", "#,##0", True), ("eer_sis", "0.00", True),
                                    ("cop_abs", "0.000", True), ("capex_total", "#,##0", False),
                                    ("retorno_anos", "0.0", False)]:
         tab = {}
@@ -277,10 +297,10 @@ def _hoja_mapas(wb, rutas, filas):
         rng = f"B{fila0 + 2}:{get_column_letter(1 + len(xs))}{fila0 + 1 + len(ys)}"
         wm.conditional_formatting.add(rng, ColorScaleRule(**(VERDE_ROJO if mejor_alto else ROJO_VERDE)))
         alto = len(ys) + 4
-        if clave == "ahorro_neto":
+        if clave == "coste_util":
             lc = LineChart()
-            lc.title = f"Ahorro neto frente a {P.etiqueta(x_r)} (una línea por {P.etiqueta(y_r)})"
-            lc.y_axis.title, lc.x_axis.title = "€/año", f"{P.etiqueta(x_r)} ({P.unidad(x_r)})"
+            lc.title = f"Coste por MWh útil frente a {P.etiqueta(x_r)} (una línea por {P.etiqueta(y_r)})"
+            lc.y_axis.title, lc.x_axis.title = "€/MWh", f"{P.etiqueta(x_r)} ({P.unidad(x_r)})"
             lc.add_data(Reference(wm, min_col=1, max_col=1 + len(xs), min_row=fila0 + 2, max_row=fila0 + 1 + len(ys)),
                         from_rows=True, titles_from_data=True)
             lc.set_categories(Reference(wm, min_col=2, max_col=1 + len(xs), min_row=fila0 + 1))
@@ -444,5 +464,110 @@ def escribir(ruta, modo, caso, res, barrido_vars, filas_barrido, sens, equil, ca
     for i, a in enumerate(avisos(modo, caso, res, filas_barrido)):
         ws.cell(3 + i, 1, "• " + a).alignment = Alignment(wrap_text=True)
     _hoja_entradas(wb.create_sheet("Entradas"), caso, barrido_vars)
+    Path(ruta).parent.mkdir(parents=True, exist_ok=True)
+    wb.save(ruta)
+
+
+# ================================================================== optimizador
+SITUACION = ["cpd.q_kw", "cpd.t_sal", "cpd.t_ret", "cpd.pue", "frio.demanda_kw", "frio.t_imp", "frio.t_ret",
+             "rech.t_ent", "rech.torre_kw", "rec.r1_kw", "rec.r2_kw", "rec.r2_t_sal", "rec.cobertura",
+             "eco.elec", "eco.agua", "rec.precio_calor", "enf.eer_ref"]
+COLS_OPT = [  # clave, cabecera, formato, ancho
+    ("modo", "Modo", "@", 16), ("cal.t_ida", "T al generador (°C)", "0", 11),
+    ("eq.bdc1", "BdC 1", "@", 34), ("n_bdc1", "Nº", "0", 5), ("eq.abs", "Absorción", "@", 26), ("n_abs", "Nº", "0", 5),
+    ("eq.r2", "BdC R2", "@", 30), ("n_r2", "Nº", "0", 5),
+    ("calor_revalorizado_mwh", "Calor CPD revalorizado (MWh/a)", "#,##0", 14), ("frac_revalorizado", "% del calor del CPD", "0%", 10),
+    ("erf", "ERF", "0.00", 7), ("util_mwh", "Energía útil (MWh/a)", "#,##0", 11), ("frio_mwh", "Frío (MWh/a)", "#,##0", 10),
+    ("calor_rec_mwh", "Calor (MWh/a)", "#,##0", 10), ("coste_util", "Coste por MWh útil (€/MWh)", "#,##0", 12),
+    ("valor_util", "Coste actual del sitio (€/MWh)", "#,##0", 12), ("capex_total", "CAPEX (€)", "#,##0", 12),
+    ("ahorro_neto", "Frente a la enfriadora (€/a)", "#,##0", 12), ("cop_bdc1", "COP BdC 1", "0.00", 8),
+    ("cop_abs", "COP abs.", "0.000", 8), ("cal_bdc1", "Dato BdC 1", "@", 15), ("cal_abs", "Dato abs.", "@", 15),
+    ("cal_r2", "Dato R2", "@", 15), ("cobertura_frio", "Frío cubierto", "0%", 9), ("limitante", "Qué limita", "@", 26),
+]
+
+
+def _tabla_opt(ws, fila0, sols, puesto=True):
+    cols = ([("puesto", "Puesto", "0", 7)] if puesto else []) + COLS_OPT
+    _cab(ws, fila0, [c[1] for c in cols])
+    ws.row_dimensions[fila0].height = 45
+    for i, s in enumerate(sols):
+        for j, (k, _, fmt, _) in enumerate(cols):
+            v = i + 1 if k == "puesto" else s[k]
+            if k == "modo":
+                v = P.MODOS[v]
+            celda = ws.cell(fila0 + 1 + i, 1 + j)
+            if k.startswith("cal_"):
+                if k == "cal_r2" and s["modo"] != "con_recuperacion":
+                    celda.value = "—"
+                else:
+                    _calidad(celda, v)
+                continue
+            celda.value = _v(v)
+            if not isinstance(celda.value, str):
+                celda.number_format = fmt
+    for j, c in enumerate(cols, 1):
+        ws.column_dimensions[get_column_letter(j)].width = c[3]
+    return cols
+
+
+def escribir_optimizacion(ruta, caso, sols, opciones):
+    from .estudio import OBJETIVOS, ordenar
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Situación del cliente"
+    _anchos(ws, [52, 16, 18])
+    ws["A1"] = "heat2cool · optimización para este sitio"
+    ws["A1"].font = TIT
+    ws["A2"] = ("El optimizador prueba BdC 1, absorción, con o sin recuperación (y BdC R2) y la T del agua al generador "
+                f"{', '.join(f'{t:g}' for t in opciones['t_gen'])} °C, con estas condiciones fijas del sitio.")
+    ws["A2"].alignment = Alignment(wrap_text=True)
+    ws.row_dimensions[2].height = 30
+    _cab(ws, 4, ["Situación del cliente", "Valor", "Unidad"])
+    for i, r in enumerate(SITUACION):
+        ws.cell(5 + i, 1, P.etiqueta(r))
+        ws.cell(5 + i, 2, caso[r])
+        ws.cell(5 + i, 3, P.unidad(r))
+    f = 6 + len(SITUACION)
+    ws.cell(f, 1, "Filtros").font = SUB
+    ws.cell(f + 1, 1, "Calidad del dato admitida")
+    ws.cell(f + 1, 2, "hasta extrapolado ≤10 K" if opciones["max_nivel"] == 2 else EMOJI_CAL[opciones["max_nivel"]])
+    ws.cell(f + 2, 1, "Equipos genéricos")
+    ws.cell(f + 2, 2, "incluidos" if opciones["genericos"] else "excluidos")
+    ws.cell(f + 3, 1, "Soluciones evaluadas")
+    ws.cell(f + 3, 2, len(sols))
+
+    ws.cell(f + 5, 1, "Mejor solución según cada objetivo").font = SUB
+    for i, (k, (nombre, _)) in enumerate(OBJETIVOS.items()):
+        if not sols:
+            break
+        m = ordenar(sols, k)[0]
+        texto = (f"{P.MODOS[m['modo']]} · {m['cal.t_ida']:g} °C · {m['n_bdc1']}× {m['eq.bdc1']} + {m['n_abs']}× {m['eq.abs']}"
+                 + (f" + {m['n_r2']}× {m['eq.r2']}" if m["eq.r2"] else ""))
+        ws.cell(f + 6 + i, 1, nombre).font = Font(bold=True)
+        ws.cell(f + 6 + i, 2, texto)
+
+    cortos = {"coste_util": "Top 5 · coste MWh", "calor_revalorizado_mwh": "Top 5 · calor revalorizado",
+              "erf": "Top 5 · ERF", "ahorro_neto": "Top 5 · ahorro"}
+    for k, (nombre, _) in OBJETIVOS.items():
+        wt = wb.create_sheet(cortos[k])
+        wt["A1"] = f"Top 5 · {nombre}"
+        wt["A1"].font = TIT
+        top = ordenar(sols, k)[:5]
+        cols = _tabla_opt(wt, 3, top)
+        jk = [c[0] for c in cols].index(k) + 1
+        for i in range(len(top)):
+            wt.cell(4 + i, jk).font = Font(bold=True, color="1F4E78")
+        wt.freeze_panes = "D4"
+
+    wa = wb.create_sheet("Todas las soluciones")
+    todas = ordenar(sols, "coste_util")
+    cols = _tabla_opt(wa, 1, todas)
+    n = len(todas)
+    if n:
+        for k, regla in (("coste_util", ROJO_VERDE), ("calor_revalorizado_mwh", VERDE_ROJO), ("ahorro_neto", VERDE_ROJO)):
+            letra = get_column_letter([c[0] for c in cols].index(k) + 1)
+            wa.conditional_formatting.add(f"{letra}2:{letra}{n + 1}", ColorScaleRule(**regla))
+        wa.auto_filter.ref = f"A1:{get_column_letter(len(cols))}{n + 1}"
+    wa.freeze_panes = "D2"
     Path(ruta).parent.mkdir(parents=True, exist_ok=True)
     wb.save(ruta)

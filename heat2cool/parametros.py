@@ -16,6 +16,8 @@ PARAMS = [
     ("CPD (fuente de calor)", "cpd.horas", "Horas de funcionamiento al año", 8760.0, "h", BASE, ""),
     ("CPD (fuente de calor)", "cpd.dry_cooler_kwe_kw", "Ventiladores dry cooler CPD ahorrados", 0.025, "kWe/kW", SUP,
      "electricidad que deja de gastar el dry cooler por kW recuperado"),
+    ("CPD (fuente de calor)", "cpd.pue", "PUE del CPD", 1.3, "-", SUP,
+     "energía total del CPD / energía IT; se usa para el ERF (el calor recuperable ≈ potencia IT)"),
     # ------------------------------------------------------------ agua caliente
     ("Agua caliente (BdC 1 → generador)", "cal.t_ida", "T ida al generador", 90.0, "°C", BASE, ""),
     ("Agua caliente (BdC 1 → generador)", "cal.t_ret", "T retorno del generador", 85.0, "°C", SUP, "nominal típico de catálogo 88/83"),
@@ -55,6 +57,10 @@ PARAMS = [
     ("Enfriadora existente", "enf.t_ref", "T agua enfriada de referencia del EER", 7.0, "°C", SUP, ""),
     ("Enfriadora existente", "enf.t_cond", "T condensación equivalente", 38.0, "°C", SUP, "rechazo 35 + 3 K"),
     # ------------------------------------------------------------ recuperación
+    ("Recuperación (solo modo con recuperación)", "rec.r1_on", "Aplicar R1 (precalentar red)", 1.0, "sí/no", BASE,
+     "1 = sí, 0 = no"),
+    ("Recuperación (solo modo con recuperación)", "rec.r2_on", "Aplicar R2 (BdC de calor a alta T)", 1.0, "sí/no", BASE,
+     "1 = sí, 0 = no"),
     ("Recuperación (solo modo con recuperación)", "rec.r1_kw", "R1: demanda precalentamiento red", 60.0, "kW", BASE, "15→30 °C"),
     ("Recuperación (solo modo con recuperación)", "rec.r2_kw", "R2: demanda de calor a alta T", 240.0, "kW", BASE, ""),
     ("Recuperación (solo modo con recuperación)", "rec.r2_t_sal", "R2: T de entrega", 90.0, "°C", BASE, ""),
@@ -63,6 +69,8 @@ PARAMS = [
     ("Recuperación (solo modo con recuperación)", "rec.precio_calor", "Coste del calor desplazado (combustible)", 0.05, "€/kWh", SUP, ""),
     ("Recuperación (solo modo con recuperación)", "rec.rend_caldera", "Rendimiento de la caldera desplazada", 0.90, "-", SUP, ""),
     # ------------------------------------------------------------ economía
+    ("Optimizador", "opt.recuperacion", "Recuperación en el optimizador", 1.0, "0/1/2", BASE,
+     "0 = no aplicar, 1 = que decida el optimizador, 2 = aplicar siempre"),
     ("Economía", "eco.elec", "Precio medio electricidad", 0.12, "€/kWh", SUP, ""),
     ("Economía", "eco.agua", "Precio agua + vertido", 2.0, "€/m3", SUP, ""),
     ("Economía", "eco.mant", "Mantenimiento anual", 0.03, "frac. CAPEX", SUP, ""),

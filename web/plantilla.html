@@ -55,16 +55,46 @@ th:first-child,td:first-child{text-align:left}th{color:var(--muted);font-weight:
 .ctl input{width:90px}
 ul.avisos{margin:0;padding-left:18px}ul.avisos li{margin:4px 0}
 .err{background:var(--q3);border-radius:8px;padding:10px 14px;display:none}
+.toast{position:fixed;right:16px;bottom:16px;max-width:min(460px,calc(100vw - 32px));padding:12px 16px;border-radius:10px;
+background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--good);box-shadow:0 4px 16px rgba(0,0,0,.18);z-index:20;display:none}
+.toast.mal{border-left-color:var(--bad)}
 footer{color:var(--muted);font-size:12px;text-align:center;padding:10px 20px 24px}
+/* vistas: .av solo en avanzada, .si solo en sencilla */
+body[data-vista="simple"] .av{display:none!important}
+body[data-vista="avanzada"] .si{display:none!important}
+body[data-vista="simple"] .layout{grid-template-columns:300px 1fr;max-width:1300px}
+@media (max-width:980px){body[data-vista="simple"] .layout{grid-template-columns:1fr}}
+.veredicto{display:flex;gap:16px;align-items:flex-start;padding:18px 20px}
+.veredicto .ico{flex:0 0 44px;height:44px;border-radius:50%;display:grid;place-items:center;font-size:22px;font-weight:700;color:#fff}
+.veredicto .ico.pos{background:var(--good)}.veredicto .ico.neg{background:var(--bad)}
+.veredicto h2{font-size:18px;margin:2px 0 6px}.veredicto p{margin:4px 0;color:var(--ink)}.veredicto .nota{color:var(--muted);font-size:13px}
+.deslizador{padding:8px 16px}
+.deslizador .cab{display:flex;justify-content:space-between;gap:8px;font-size:12.5px;margin-bottom:2px}
+.deslizador output{font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
+.deslizador input[type=range]{width:100%;accent-color:var(--accent)}
+.panel-tit{font-weight:600;padding:12px 16px 4px;font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
+.panel-nota{padding:10px 16px 14px;font-size:12px;color:var(--muted)}
+.sankey{height:auto}
+.btn.primario{background:var(--accent);border-color:var(--accent);color:#fff}
+table.top td{vertical-align:top}table.top .u{color:var(--muted);font-size:12px}
+.ctl label{display:inline-flex;gap:4px;align-items:center}
+.chk{display:flex;gap:8px;align-items:center;padding:5px 16px;font-size:13px;cursor:pointer}
+.chk input{width:16px;height:16px;accent-color:var(--accent)}
+.campo select{width:100%;padding:5px 7px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink);font:inherit;font-size:13px}
+.flujos{display:block;font-family:inherit}
+.flujos .cinta{transition:fill-opacity .15s}.flujos .cinta:hover{fill-opacity:.55}
+.flujos .et-n,.flujos .et-v{paint-order:stroke;stroke:var(--panel);stroke-width:4px;stroke-linejoin:round}
+.flujos .et-n{font-size:12.5px;font-weight:600;fill:var(--ink)}.flujos .et-v{font-size:12px;fill:var(--muted)}
 </style>
 </head>
 <body>
 <header>
   <h1>heat2cool <small>CPD → bomba de calor → absorción</small></h1>
   <div class="seg" id="modos"></div>
+  <div class="seg" id="vistas"><button data-v="simple">Sencillo</button><button data-v="avanzada">Avanzado</button></div>
   <div class="acciones">
     <button class="btn" id="b-exp" title="Descarga el caso actual como JSON">Exportar caso</button>
-    <label class="btn" title="Carga un caso JSON exportado antes">Importar<input type="file" id="b-imp" accept=".json" hidden></label>
+    <label class="btn" title="Carga entrada.xlsx, un Excel de resultados o un caso .json exportado">Importar Excel / JSON<input type="file" id="b-imp" accept=".xlsx,.json" hidden></label>
     <button class="btn" id="b-reset">Restablecer</button>
     <button class="btn" id="b-tema" title="Tema claro / oscuro" aria-label="Cambiar tema">◐</button>
   </div>
@@ -73,28 +103,29 @@ footer{color:var(--muted);font-size:12px;text-align:center;padding:10px 20px 24p
   <aside id="panel"></aside>
   <main>
     <div class="err" id="error"></div>
+    <div class="card veredicto si" id="veredicto"></div>
     <div class="kpis" id="kpis"></div>
-    <div class="grid2">
-      <div class="card"><h2>Flujos de energía a plena carga</h2><p class="desc" id="d-sankey">kW en condiciones de diseño</p><div class="plot" id="g-sankey"></div></div>
-      <div class="card"><h2>Coste anual: línea base frente a sistema nuevo</h2><p class="desc">€/año. La línea base cubre todo el frío con la enfriadora existente.</p><div class="plot" id="g-costes"></div></div>
-    </div>
-    <div class="card">
+    <div class="card" id="optimizador"></div>
+    <div class="card"><h2>¿Adónde va la energía?</h2><p class="desc" id="d-sankey">kW a plena carga</p><div class="plot sankey" id="g-sankey"></div></div>
+    <div class="card"><h2 id="t-costes">Coste anual</h2><p class="desc" id="d-costes"></p><div class="plot" id="g-costes"></div></div>
+    <div class="card av">
       <h2>Mapa de escenarios</h2>
       <div class="ctl" id="ctl-mapa"></div>
       <p class="desc">Cada celda es un año completo calculado con las curvas. Pulsa una celda para llevar esos valores al caso. Rangos: desde:hasta:paso.</p>
       <div class="plot" id="g-mapa" style="height:400px"></div>
     </div>
-    <div class="grid2">
+    <div class="grid2 av">
       <div class="card"><h2>Sensibilidad ±20 %</h2><p class="desc">Cambio del ahorro neto al mover cada parámetro un 20 %</p><div class="plot" id="g-tornado" style="height:420px"></div></div>
       <div class="card"><h2>Equipos</h2><div class="tabwrap" id="t-equipos"></div><h2 style="margin-top:14px">Circuitos a plena carga</h2><div class="tabwrap" id="t-circ"></div></div>
     </div>
-    <div class="grid2">
+    <div class="grid2 av">
       <div class="card"><h2>Funcionamiento por nivel de carga</h2><div class="plot" id="g-cargas"></div></div>
       <div class="card"><h2>Avisos</h2><ul class="avisos" id="avisos"></ul></div>
     </div>
-    <div class="card"><h2>Detalle por nivel de carga (kW)</h2><div class="tabwrap" id="t-cargas"></div></div>
+    <div class="card av"><h2>Detalle por nivel de carga (kW)</h2><div class="tabwrap" id="t-cargas"></div></div>
   </main>
 </div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
 <footer>heat2cool · cálculo en el navegador con el mismo motor que la versión Python · los importes dependen de los parámetros marcados en naranja (supuestos)</footer>
 
 <script>/*__PLOTLY__*/</script>
@@ -103,9 +134,9 @@ footer{color:var(--muted);font-size:12px;text-align:center;padding:10px 20px 24p
 const DATOS = /*__DATOS__*/;
 const CAT = DATOS.catalogo;
 const CAL = {0: ["genérico", "q0"], 1: ["dentro de rango", "q1"], 2: ["extrapolado", "q2"], 3: ["fuera de rango", "q3"]};
-const fmt0 = new Intl.NumberFormat("es-ES", {maximumFractionDigits: 0});
-const fmt1 = new Intl.NumberFormat("es-ES", {maximumFractionDigits: 1, minimumFractionDigits: 1});
-const fmt2 = new Intl.NumberFormat("es-ES", {maximumFractionDigits: 2, minimumFractionDigits: 2});
+const fmt0 = new Intl.NumberFormat("es-ES", {useGrouping: "always", maximumFractionDigits: 0});
+const fmt1 = new Intl.NumberFormat("es-ES", {useGrouping: "always", maximumFractionDigits: 1, minimumFractionDigits: 1});
+const fmt2 = new Intl.NumberFormat("es-ES", {useGrouping: "always", maximumFractionDigits: 2, minimumFractionDigits: 2});
 const eur = (x) => fmt0.format(x) + " €";
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
 const etq = (r) => (DATOS.params.find((p) => p[1] === r) || [0, 0, r])[2];
@@ -114,13 +145,75 @@ const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v
 
 let caso = JSON.parse(JSON.stringify(DATOS.caso));
 let modo = "sin_recuperacion";
-try { const g = localStorage.getItem("heat2cool_caso"); if (g) caso = Object.assign(caso, JSON.parse(g)); } catch (e) {}
+let vista = new URLSearchParams(location.search).get("vista") || /*__VISTA__*/"simple";
+if (!["simple", "avanzada"].includes(vista)) vista = "simple";
+try {
+  const g = JSON.parse(localStorage.getItem("heat2cool_caso") || "null");
+  // un caso guardado con equipos que ya no están en este catálogo se descarta
+  if (g && DATOS.equipos.every((e) => CAT[g[e[0]]])) caso = Object.assign(caso, g);
+} catch (e) {}
 try { const t = localStorage.getItem("heat2cool_tema"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
 
 // ---------------------------------------------------------------- panel de entradas
+// vista sencilla: lo que más mueve el resultado, con deslizadores (ruta, etiqueta corta, mín, máx, paso)
+const SENCILLOS = [
+  ["cpd.q_kw", "Calor disponible del CPD", 10, 500, 5],
+  ["frio.demanda_kw", "Demanda de frío", 10, 500, 5],
+  ["cal.t_ida", "Temperatura del agua al generador", 70, 100, 1],
+  ["frio.t_imp", "Temperatura del agua fría", 4, 14, 0.5],
+  ["rech.t_ent", "Temperatura del agua de torre", 20, 35, 0.5],
+  ["eco.elec", "Precio de la electricidad", 0.03, 0.40, 0.01],
+  ["enf.eer_ref", "EER de la enfriadora actual", 1, 8, 0.1],
+  ["rec.precio_calor", "Precio del calor que se ahorra", 0.02, 0.20, 0.005],
+];
+const uniC = (r) => (uni(r) === "-" ? "" : uni(r));
+const fmtVal = (v, paso) => new Intl.NumberFormat("es-ES", {useGrouping: "always", maximumFractionDigits: paso < 0.01 ? 3 : paso < 1 ? 2 : 0}).format(v);
+
+const activo = (r) => (caso[r] ?? 1) >= 0.5;
+const OPC_REC = [[0, "No aplicar"], [1, "Que decida el optimizador"], [2, "Aplicar siempre"]];
+
+function construirPanelSencillo(panel) {
+  if (modo === "con_recuperacion") {
+    panel.insertAdjacentHTML("beforeend", `<div class="panel-tit">Recuperación</div>
+      <label class="chk"><input type="checkbox" data-r="rec.r1_on" ${activo("rec.r1_on") ? "checked" : ""}> Aplicar R1 · precalentar red</label>
+      <label class="chk"><input type="checkbox" data-r="rec.r2_on" ${activo("rec.r2_on") ? "checked" : ""}> Aplicar R2 · calor a ${fmt0.format(caso["rec.r2_t_sal"])} °C</label>`);
+  }
+  panel.insertAdjacentHTML("beforeend", `<div class="panel-tit">Equipos</div>`);
+  DATOS.equipos.forEach(([ruta, nombre, tipo]) => {
+    if (ruta === "eq.r2" && (modo !== "con_recuperacion" || !activo("rec.r2_on"))) return;
+    const opts = Object.keys(CAT).filter((n) => CAT[n].tipo === tipo)
+      .map((n) => `<option value="${esc(n)}" ${n === caso[ruta] ? "selected" : ""}>${esc(n)}</option>`).join("");
+    panel.insertAdjacentHTML("beforeend", `<div class="eqbox"><label>${nombre} <span class="badge" id="q-${ruta}"></span></label>
+      <select class="eq" data-r="${ruta}">${opts}</select></div>`);
+  });
+  panel.insertAdjacentHTML("beforeend", `<div class="panel-tit">Condiciones</div>`);
+  for (const [ruta, et, mn, mx, paso] of SENCILLOS) {
+    if (ruta === "rec.precio_calor" && modo !== "con_recuperacion") continue;
+    const v = caso[ruta];
+    panel.insertAdjacentHTML("beforeend", `<div class="deslizador"><div class="cab"><label for="s-${ruta}">${et}</label>
+      <output id="o-${ruta}">${fmtVal(v, paso)} ${uniC(ruta)}</output></div>
+      <input type="range" id="s-${ruta}" data-r="${ruta}" min="${Math.min(mn, v)}" max="${Math.max(mx, v)}" step="${paso}" value="${v}"></div>`);
+  }
+  panel.insertAdjacentHTML("beforeend", `<div class="panel-nota">El resto de parámetros (economía, pinch, bombeo, perfil de carga…) se cambian en la vista <b>Avanzado</b>.</div>`);
+  panel.querySelectorAll("[data-r]").forEach((el) => el.addEventListener("input", () => {
+    const r = el.dataset.r;
+    if (el.type === "checkbox") {
+      caso[r] = el.checked ? 1 : 0;
+      if (r === "rec.r2_on") construirPanel();  // muestra u oculta el selector de la BdC R2
+    } else if (el.tagName === "SELECT") caso[r] = el.value;
+    else {
+      caso[r] = parseFloat(el.value);
+      const paso = SENCILLOS.find((s) => s[0] === r)[4];
+      document.getElementById("o-" + r).textContent = `${fmtVal(caso[r], paso)} ${uniC(r)}`;
+    }
+    programar();
+  }));
+}
+
 function construirPanel() {
   const panel = document.getElementById("panel");
   panel.innerHTML = "";
+  if (vista === "simple") return construirPanelSencillo(panel);
   const eq = document.createElement("details"); eq.open = true;
   eq.innerHTML = "<summary>Equipos</summary>";
   DATOS.equipos.forEach(([ruta, nombre, tipo], i) => {
@@ -142,8 +235,17 @@ function construirPanel() {
     for (const [, ruta, et, , u, origen, nota] of DATOS.params.filter((p) => p[0] === b)) {
       const f = document.createElement("div"); f.className = "campo";
       f.title = (origen === "SUPUESTO" ? "[SUPUESTO] " : "[BASE] ") + (nota || "");
-      f.innerHTML = `<label>${et} <span class="u">${u}</span></label>
-        <input type="number" step="any" data-r="${ruta}" value="${caso[ruta]}" class="${origen === "SUPUESTO" ? "sup" : ""}">`;
+      if (u === "sí/no") {
+        f.innerHTML = `<label for="c-${ruta}">${et}</label>
+          <input type="checkbox" id="c-${ruta}" data-r="${ruta}" ${activo(ruta) ? "checked" : ""} style="justify-self:start;width:18px;height:18px;accent-color:var(--accent)">`;
+      } else if (u === "0/1/2") {
+        f.style.gridTemplateColumns = "1fr 1fr";
+        f.innerHTML = `<label>${et}</label><select data-r="${ruta}" data-num="1">${OPC_REC.map(([v, t]) =>
+          `<option value="${v}" ${Math.round(caso[ruta] ?? 1) === v ? "selected" : ""}>${t}</option>`).join("")}</select>`;
+      } else {
+        f.innerHTML = `<label>${et} <span class="u">${u}</span></label>
+          <input type="number" step="any" data-r="${ruta}" value="${caso[ruta]}" class="${origen === "SUPUESTO" ? "sup" : ""}">`;
+      }
       d.appendChild(f);
     }
     panel.appendChild(d);
@@ -158,9 +260,12 @@ function construirPanel() {
   });
   panel.appendChild(pf);
   panel.querySelectorAll("[data-r]").forEach((el) => el.addEventListener("input", () => {
-    const v = el.tagName === "SELECT" ? el.value : parseFloat(el.value);
-    if (el.tagName !== "SELECT" && !isFinite(v)) return;
+    let v;
+    if (el.type === "checkbox") v = el.checked ? 1 : 0;
+    else if (el.tagName === "SELECT") v = el.dataset.num ? parseFloat(el.value) : el.value;
+    else { v = parseFloat(el.value); if (!isFinite(v)) return; }
     caso[el.dataset.r] = v; programar();
+    const o = document.getElementById("o-rec"); if (o && el.dataset.r === "opt.recuperacion") o.value = v;
   }));
   panel.querySelectorAll("[data-perfil]").forEach((el) => el.addEventListener("input", () => {
     const v = parseFloat(el.value); if (!isFinite(v)) return;
@@ -171,10 +276,12 @@ function construirPanel() {
 // ---------------------------------------------------------------- mapa: controles
 const B = DATOS.barrido;
 const mapa = {x: B[0] ? B[0][0] : "cal.t_ida", xv: B[0] ? B[0][1] : [75, 80, 85, 90, 95],
-  y: B[1] ? B[1][0] : "frio.t_imp", yv: B[1] ? B[1][1] : [4, 5, 6, 7, 8, 9, 10], metrica: "ahorro_neto"};
-const METRICAS = {ahorro_neto: "Ahorro neto (€/a)", eer_sis: "EER sistema", capex_total: "CAPEX (€)",
+  y: B[1] ? B[1][0] : "frio.t_imp", yv: B[1] ? B[1][1] : [4, 5, 6, 7, 8, 9, 10], metrica: "coste_util"};
+const METRICAS = {coste_util: "Coste por MWh útil (€/MWh)", calor_revalorizado_mwh: "Calor del CPD revalorizado (MWh/a)",
+  erf: "ERF del CPD", util_mwh: "Energía útil al sitio (MWh/a)", ahorro_neto: "Ahorro frente a la enfriadora (€/a)",
+  eer_sis: "EER sistema", capex_total: "CAPEX (€)",
   retorno_anos: "Retorno (años)", cop_abs: "COP absorción", cop_bdc1: "COP BdC 1", cobertura_frio: "Cobertura del frío"};
-const MENOS_ES_MEJOR = ["capex_total", "retorno_anos"];
+const MENOS_ES_MEJOR = ["capex_total", "retorno_anos", "coste_util"];
 const rango = (v) => `${v[0]}:${v[v.length - 1]}:${v.length > 1 ? +(v[1] - v[0]).toFixed(3) : 1}`;
 function parseRango(s) {
   const [a, b, p] = s.split(":").map((x) => parseFloat(x.replace(",", ".")));
@@ -203,38 +310,121 @@ const layoutBase = () => ({margin: {l: 50, r: 16, t: 10, b: 40}, paper_bgcolor: 
 const cfg = {displaylogo: false, responsive: true, modeBarButtonsToRemove: ["lasso2d", "select2d"]};
 
 function kpis(r, eq) {
-  const k = [
-    ["Ahorro neto", eur(r.ahorro_neto) + "/a", r.ahorro_neto >= 0 ? "pos" : "neg", "frente a la línea base"],
+  const rev = [
+    ["Calor del CPD revalorizado", fmt0.format(r.calor_revalorizado_mwh) + " MWh/a", "", `${fmt0.format(r.frac_revalorizado * 100)} % del calor residual del CPD`],
+    ["ERF del CPD", fmt2.format(r.erf), "", `calor reutilizado / energía total (PUE ${fmt2.format(caso["cpd.pue"])})`],
+    ["Coste por MWh útil", r.coste_util === Infinity ? "—" : fmt0.format(r.coste_util) + " €/MWh", "", `hoy al sitio le cuesta ${fmt0.format(r.valor_util)} €/MWh`],
+    ["Energía útil para el sitio", fmt0.format(r.util_mwh) + " MWh/a", "", `frío ${fmt0.format(r.frio_mwh)} · calor ${fmt0.format(r.calor_rec_mwh)} MWh/a`],
+  ];
+  const k = vista === "simple" ? rev : rev.concat([
+    ["Frente a la enfriadora", eur(r.ahorro_neto) + "/a", r.ahorro_neto >= 0 ? "pos" : "neg", "ahorro neto (secundario)"],
     ["CAPEX", eur(r.capex_total), "", `${fmt0.format(r.capex_anual)} €/a anualizado`],
     ["Retorno simple", r.retorno_anos === Infinity ? "no se recupera" : fmt1.format(r.retorno_anos) + " años", "", "sin descontar"],
     ["EER sistema nuevo", fmt2.format(r.eer_sis), "", `enfriadora existente ${fmt2.format(r.eer_enf)}`],
     ["Frío cubierto", fmt0.format(r.cobertura_frio * 100) + " %", "", r.limitante],
     ["Empata con EER", eq.eer_equilibrio == null ? "—" : fmt2.format(eq.eer_equilibrio), "", `de la enfriadora (supuesto ${caso["enf.eer_ref"]})`],
-  ];
+  ]);
   document.getElementById("kpis").innerHTML = k.map(([t, v, c, s]) =>
     `<div class="kpi"><div class="t">${t}</div><div class="v ${c}">${v}</div><div class="s">${s}</div></div>`).join("");
 }
 
+// colores por tipo de energía (mismos en todo el dashboard)
+const COLOR = {calor: "#E4572E", elec: "#F2A541", frio: "#2E86DE", abs: "#7E57C2", rech: "#8D99AE", rec: "#2BA84A"};
+const rgba = (hex, a) => `rgba(${parseInt(hex.slice(1, 3), 16)},${parseInt(hex.slice(3, 5), 16)},${parseInt(hex.slice(5, 7), 16)},${a})`;
+
+// Diagrama de flujos propio en SVG: columnas fijas, cintas proporcionales a los kW, etiquetas que no se pisan.
+let ultimoFlujo = null;
 function sankey(r) {
   const rec = modo === "con_recuperacion";
   const d = rec ? H2C.punto(caso, H2C.dimensionar(caso, H2C.modelos(caso, CAT)), 1, true) : r.diseno;
-  document.getElementById("d-sankey").textContent = rec ? "kW a plena carga con R1/R2 en marcha" : "kW a plena carga (diseño)";
-  const N = ["Calor del CPD", "Electricidad BdC 1", "BdC 1", "Calor extraído del agua enfriada", "Absorción", "Rechazo",
-    "Torre existente", "Adiabático nuevo", "R1 precalentar red", "BdC R2", "Electricidad R2", "Calor a 90 °C (R2)"];
-  const COL = ["#d9534f", "#e8a33d", "#d9534f", "#3b8bd9", "#6f42c1", "#8c99a6", "#8c99a6", "#8c99a6", "#178a4c", "#178a4c", "#e8a33d", "#178a4c"];
-  const L = [[0, 2, d.q_evap], [1, 2, d.w_bdc1], [2, 4, d.q_gen], [3, 4, d.q_frio], [4, 5, d.q_rej], [5, 6, d.q_torre],
-    [5, 7, d.q_adiab], [5, 8, d.q_r1], [5, 9, d.q_r2_ext], [10, 9, d.w_r2], [9, 11, d.q_r2]].filter((l) => l[2] > 0.05);
-  Plotly.react("g-sankey", [{type: "sankey", arrangement: "snap", valueformat: ".1f", valuesuffix: " kW",
-    node: {label: N, pad: 14, thickness: 14, color: COL, line: {width: 0}},
-    link: {source: L.map((l) => l[0]), target: L.map((l) => l[1]), value: L.map((l) => l[2]), color: L.map((l) => COL[l[0]] + "44")}}],
-  Object.assign(layoutBase(), {margin: {l: 8, r: 8, t: 8, b: 8}}), cfg);
+  document.getElementById("d-sankey").textContent = rec
+    ? "kW a plena carga, con la recuperación R1/R2 en marcha. Pasa el ratón por un flujo para resaltarlo."
+    : "kW a plena carga. Pasa el ratón por un flujo para resaltarlo.";
+  ultimoFlujo = d;
+  dibujarFlujos(d, rec);
+}
+
+function dibujarFlujos(d, rec) {
+  const caja = document.getElementById("g-sankey");
+  const W = Math.max(caja.clientWidth, 840), H = 380, ETQ = 150, ETQ_I = 132, nodoW = 12, gap = 26, top = 12;
+  // [clave, nombre, color, columna]
+  const N = [["cpd", "Calor del CPD", COLOR.calor, 0], ["e1", "Electricidad BdC 1", COLOR.elec, 0],
+    ["bdc", "Bomba de calor", COLOR.calor, 1], ["fr", "Frío producido", COLOR.frio, 1],
+    ["abs", "Absorción", COLOR.abs, 2], ["e2", "Electricidad R2", COLOR.elec, 3], ["rej", "Rechazo", COLOR.rech, 3],
+    ["r2", "BdC R2", COLOR.rec, 4], ["q90", "Calor útil a 90 °C", COLOR.rec, 5], ["r1", "R1 · precalentar red", COLOR.rec, 5],
+    ["torre", "Torre existente", COLOR.rech, 5], ["adiab", "Adiabático nuevo", COLOR.rech, 5]];
+  // el orden de los flujos fija el orden de entrada/salida en cada bloque (evita cruces)
+  const L = [["cpd", "bdc", d.q_evap], ["e1", "bdc", d.w_bdc1], ["bdc", "abs", d.q_gen], ["fr", "abs", d.q_frio],
+    ["abs", "rej", d.q_rej], ["e2", "r2", d.w_r2], ["rej", "r2", d.q_r2_ext], ["r2", "q90", d.q_r2],
+    ["rej", "r1", d.q_r1], ["rej", "torre", d.q_torre], ["rej", "adiab", d.q_adiab]].filter((l) => l[2] > 0.5);
+  const nodos = N.filter((n) => L.some((l) => l[0] === n[0] || l[1] === n[0]))
+    .map(([k, nombre, color, col]) => ({k, nombre, color, col,
+      v: Math.max(L.filter((l) => l[0] === k).reduce((s, l) => s + l[2], 0), L.filter((l) => l[1] === k).reduce((s, l) => s + l[2], 0))}));
+  const nCol = 6, x0 = ETQ_I, x1 = W - ETQ - nodoW;
+  const colX = (c) => x0 + (x1 - x0) * c / (nCol - 1);
+  const cols = [...Array(nCol).keys()].map((c) => nodos.filter((n) => n.col === c));
+  const k = Math.min(...cols.filter((c) => c.length).map((c) => (H - 2 * top - gap * (c.length - 1)) / c.reduce((s, n) => s + n.v, 0)));
+  for (const c of cols) {
+    const alto = c.reduce((s, n) => s + n.v * k, 0) + gap * (c.length - 1);
+    let y = c[0] && (c[0].k === "r2" || c[0].k === "e2") ? top : (H - alto) / 2;  // la rama de R2 va arriba
+    for (const n of c) { n.x = colX(n.col); n.y = y; n.h = Math.max(n.v * k, 2); n.sal = n.y; n.ent = n.y; y += n.h + gap; }
+  }
+  const por = Object.fromEntries(nodos.map((n) => [n.k, n]));
+  // R2 alineada con la parte del rechazo que recoge
+  if (por.r2 && por.rej) por.r2.y = por.r2.ent = por.r2.sal = Math.max(top, por.rej.y - (por.e2 ? por.e2.h * 0.2 : 0));
+  const cintas = L.map(([a, b, v]) => {
+    const s = por[a], t = por[b], h = v * k;
+    const ya = s.sal, yb = t.ent; s.sal += h; t.ent += h;
+    const xa = s.x + nodoW, xb = t.x, xm = (xa + xb) / 2;
+    return `<path class="cinta" d="M${xa},${ya} C${xm},${ya} ${xm},${yb} ${xb},${yb} L${xb},${yb + h} C${xm},${yb + h} ${xm},${ya + h} ${xa},${ya + h} Z"
+      fill="${s.color}" fill-opacity=".26"><title>${s.nombre} → ${t.nombre}: ${fmt1.format(v)} kW</title></path>`;
+  }).join("");
+  const bloques = nodos.map((n) => {
+    const izq = n.col === 0;  // las fuentes llevan la etiqueta a la izquierda
+    const tx = izq ? n.x - 6 : n.x + nodoW + 6, ty = n.y + n.h / 2, ancla = izq ? "end" : "start";
+    return `<g class="bloque"><rect x="${n.x}" y="${n.y}" width="${nodoW}" height="${n.h}" rx="3" fill="${n.color}"><title>${n.nombre}: ${fmt1.format(n.v)} kW</title></rect>
+      <text x="${tx}" y="${ty}" dy="-0.15em" text-anchor="${ancla}" class="et-n">${n.nombre}</text>
+      <text x="${tx}" y="${ty}" dy="1.05em" text-anchor="${ancla}" class="et-v">${fmt0.format(n.v)} kW</text></g>`;
+  }).join("");
+  caja.innerHTML = `<svg class="flujos" viewBox="0 0 ${W} ${H}" style="width:100%;height:auto" role="img"
+    aria-label="Diagrama de flujos de energía a plena carga">${cintas}${bloques}</svg>`;
+}
+window.addEventListener("resize", () => { if (ultimoFlujo) dibujarFlujos(ultimoFlujo, modo === "con_recuperacion"); });
+
+function veredicto(r, eq) {
+  const rec = modo === "con_recuperacion";
+  const p = [];
+  p.push(`Del calor residual del CPD (<b>${fmt0.format(r.calor_residual_mwh)} MWh/año</b>) se aprovechan <b>${fmt0.format(r.calor_revalorizado_mwh)} MWh</b>, que llegan al sitio como <b>${fmt0.format(r.frio_mwh)} MWh de frío</b>` +
+    (rec ? ` y <b>${fmt0.format(r.calor_rec_mwh)} MWh de calor</b>` : "") + `. ERF del CPD: <b>${fmt2.format(r.erf)}</b>.`);
+  p.push(`Producir cada MWh útil cuesta <b>${r.coste_util === Infinity ? "—" : fmt0.format(r.coste_util) + " €"}</b> (inversión, mantenimiento, electricidad y agua). ` +
+    `Hoy al sitio le cuesta ${fmt0.format(r.valor_frio)} €/MWh el frío con su enfriadora` + (rec ? ` y ${fmt0.format(r.valor_calor)} €/MWh el calor con caldera.` : "."));
+  if (r.cobertura_frio < 0.999) p.push(`A plena carga cubre el ${fmt0.format(r.cobertura_frio * 100)} % de la demanda de frío del sitio (limita: ${r.limitante.toLowerCase()}).`);
+  const dudosos = [["BdC 1", r.cal_bdc1], ["absorción", r.cal_abs]].concat(rec ? [["BdC R2", r.cal_r2]] : [])
+    .filter((x) => x[1] >= 2).map((x) => x[0]);
+  const nota = dudosos.length ? `<p class="nota">⚠ El rendimiento de ${dudosos.join(" y ")} está extrapolado fuera de los datos del fabricante: confírmalo antes de dar la cifra por buena.</p>` : "";
+  document.getElementById("veredicto").innerHTML = `<div class="ico pos">♻</div>
+    <div><h2>Se revaloriza el ${fmt0.format(r.frac_revalorizado * 100)} % del calor del CPD</h2>${p.map((x) => `<p>${x}</p>`).join("")}${nota}</div>`;
+}
+
+function costeMWh(r) {
+  document.getElementById("t-costes").textContent = "¿Cuánto cuesta cada MWh?";
+  document.getElementById("d-costes").textContent = "€/MWh. Coste de producir con el sistema nuevo frente a lo que le cuesta hoy al sitio.";
+  const rec = modo === "con_recuperacion";
+  const x = ["Sistema nuevo<br>(frío + calor)", "Hoy: frío con<br>su enfriadora"].concat(rec ? ["Hoy: calor<br>con caldera"] : []);
+  const y = [r.coste_util === Infinity ? null : r.coste_util, r.valor_frio].concat(rec ? [r.valor_calor] : []);
+  Plotly.react("g-costes", [{type: "bar", x, y, marker: {color: [COLOR.abs, COLOR.frio, COLOR.calor].slice(0, x.length)},
+    text: y.map((v) => (v == null ? "" : fmt0.format(v) + " €")), textposition: "outside", cliponaxis: false,
+    hovertemplate: "%{x}: %{y:,.0f} €/MWh<extra></extra>"}],
+  Object.assign(layoutBase(), {separators: ",.", showlegend: false, yaxis: {title: "€/MWh", gridcolor: css("--line"), rangemode: "tozero"}}), cfg);
 }
 
 function costes(r) {
-  const partidas = [["Electricidad", r.c_elec_base, r.c_elec, "#e8a33d"], ["Agua", r.c_agua_base, r.c_agua, "#3b8bd9"],
-    ["Mantenimiento", 0, r.c_mant, "#8c99a6"], ["CAPEX anualizado", 0, r.capex_anual, "#6f42c1"],
-    ["Crédito por calor", 0, -r.credito_calor, "#178a4c"]];
-  Plotly.react("g-costes", partidas.map(([n, b, s, col]) => ({type: "bar", name: n, x: ["Línea base", "Sistema nuevo"], y: [b, s],
+  document.getElementById("t-costes").textContent = "Coste anual: seguir como ahora frente al sistema nuevo";
+  document.getElementById("d-costes").textContent = "€/año. «Como ahora» = todo el frío con la enfriadora existente.";
+  const partidas = [["Electricidad", r.c_elec_base, r.c_elec, COLOR.elec], ["Agua", r.c_agua_base, r.c_agua, COLOR.frio],
+    ["Mantenimiento", 0, r.c_mant, COLOR.rech], ["Inversión (por año)", 0, r.capex_anual, COLOR.abs],
+    ["Calor que se ahorra (−)", 0, -r.credito_calor, COLOR.rec]].filter((p) => p[1] || p[2]);
+  Plotly.react("g-costes", partidas.map(([n, b, s, col]) => ({type: "bar", name: n, x: ["Como ahora", "Sistema nuevo"], y: [b, s],
     marker: {color: col}, hovertemplate: "%{x}<br>" + n + ": %{y:,.0f} €<extra></extra>"})),
   Object.assign(layoutBase(), {barmode: "relative", separators: ",.", yaxis: {title: "€/año", gridcolor: css("--line")}}), cfg);
 }
@@ -256,7 +446,7 @@ function dibujarMapa() {
       }
       z.push(fz); txt.push(ft);
     }
-    const euros = ["ahorro_neto", "capex_total"].includes(mapa.metrica);
+    const euros = ["ahorro_neto", "capex_total", "coste_util", "calor_revalorizado_mwh", "util_mwh"].includes(mapa.metrica);
     Plotly.react("g-mapa", [{type: "heatmap", x: mapa.xv.map(String), y: mapa.yv.map(String), z, text: txt,
       colorscale: "RdYlGn", reversescale: MENOS_ES_MEJOR.includes(mapa.metrica), texttemplate: euros ? "%{z:,.0f}" : "%{z:.2f}",
       hovertemplate: `${etq(mapa.x)} %{x}<br>${etq(mapa.y)} %{y}<br>%{text}<extra></extra>`, xgap: 2, ygap: 2,
@@ -345,28 +535,225 @@ function calcular() {
       const q = ruta === "eq.r2" && modo !== "con_recuperacion" ? null : r[k];
       if (el) { el.className = "badge " + (q == null ? "" : CAL[q][1]); el.textContent = q == null ? "" : CAL[q][0]; }
     }
-    kpis(r, eq); sankey(r); costes(r); tornado(); tablas(r); avisos(r); dibujarMapa();
+    kpis(r, eq); sankey(r); if (vista === "simple") costeMWh(r); else costes(r);
+    if (vista === "simple") veredicto(r, eq);
+    else { tornado(); tablas(r); avisos(r); dibujarMapa(); }
     try { localStorage.setItem("heat2cool_caso", JSON.stringify(caso)); } catch (e) {}
   } catch (e) { err.textContent = "No se puede calcular: " + e.message; err.style.display = "block"; }
 }
 let pend = null;
-function programar() { clearTimeout(pend); pend = setTimeout(calcular, 120); }
+function programar() {
+  clearTimeout(pend); pend = setTimeout(calcular, 120);
+  if (optSols) { optSols = null; document.getElementById("o-tabla").innerHTML = "";
+    document.getElementById("o-estado").textContent = "Has cambiado datos: vuelve a buscar."; }
+}
+
+// ---------------------------------------------------------------- optimizador
+let optSols = null;
+function construirOptimizador() {
+  const el = document.getElementById("optimizador");
+  el.innerHTML = `<h2>Optimizar para este sitio</h2>
+    <p class="desc">Con la situación del sitio fijada (calor del CPD, demanda, temperaturas, precios) prueba todas las combinaciones de
+    BdC 1, absorción, con/sin recuperación, BdC R2 y temperatura al generador (75–95 °C), y te da las 5 mejores.</p>
+    <div class="ctl">Objetivo <select id="o-obj">${Object.entries(H2C.OBJETIVOS).map(([k, v]) => `<option value="${k}">${v[0]}</option>`).join("")}</select>
+      Recuperación <select id="o-rec">${OPC_REC.map(([v, t]) => `<option value="${v}" ${Math.round(caso["opt.recuperacion"] ?? 1) === v ? "selected" : ""}>${t}</option>`).join("")}</select>
+      <label><input type="checkbox" id="o-fuera"> admitir equipos fuera de rango</label>
+      <label><input type="checkbox" id="o-gen"> incluir genéricos</label>
+      <button class="btn primario" id="o-buscar">Buscar las 5 mejores</button>
+      <span id="o-estado" class="desc" style="margin:0"></span></div>
+    <div class="tabwrap" id="o-tabla"></div>`;
+  el.querySelector("#o-buscar").onclick = buscarOptimo;
+  el.querySelector("#o-rec").onchange = (e) => {
+    caso["opt.recuperacion"] = parseFloat(e.target.value);
+    if (vista === "avanzada") construirPanel();
+    programar();
+  };
+  el.querySelector("#o-obj").onchange = () => optSols && pintarTop();
+}
+function buscarOptimo() {
+  const est = document.getElementById("o-estado");
+  est.textContent = "Calculando…";
+  setTimeout(() => {
+    const t0 = performance.now();
+    try {
+      optSols = H2C.soluciones(caso, CAT, document.getElementById("o-fuera").checked ? 3 : 2, document.getElementById("o-gen").checked);
+      est.textContent = `${fmt0.format(optSols.length)} soluciones viables evaluadas en ${fmt1.format((performance.now() - t0) / 1000)} s`;
+      pintarTop();
+    } catch (e) { est.textContent = "No se pudo optimizar: " + e.message; }
+  }, 20);
+}
+function pintarTop() {
+  const obj = document.getElementById("o-obj").value;
+  const top = H2C.ordenar(optSols, obj).slice(0, 5);
+  const badge = (q) => `<span class="badge ${CAL[q][1]}">${CAL[q][0]}</span>`;
+  const eqs = (s) => `${s.n_bdc1}× ${esc(s["eq.bdc1"])}<br>${s.n_abs}× ${esc(s["eq.abs"])}` + (s["eq.r2"] ? `<br>${s.n_r2}× ${esc(s["eq.r2"])} (R2)` : "");
+  document.getElementById("o-tabla").innerHTML = top.length ? `<table class="top"><tr><th>#</th><th>Solución</th><th>Equipos</th>
+    <th>Calor CPD revalorizado</th><th>ERF</th><th>Coste por MWh útil</th><th>Frente a enfriadora</th><th>CAPEX</th><th>Dato</th><th></th></tr>
+    ${top.map((s, i) => `<tr><td><b>${i + 1}</b></td><td>${DATOS.modos[s.modo]}<br><span class="u">${s["cal.t_ida"]} °C al generador</span></td>
+      <td style="text-align:left;white-space:normal;min-width:220px">${eqs(s)}</td>
+      <td>${fmt0.format(s.calor_revalorizado_mwh)} MWh/a<br><span class="u">${fmt0.format(s.frac_revalorizado * 100)} %</span></td>
+      <td>${fmt2.format(s.erf)}</td><td><b>${fmt0.format(s.coste_util)} €/MWh</b><br><span class="u">hoy ${fmt0.format(s.valor_util)}</span></td>
+      <td class="${s.ahorro_neto >= 0 ? "pos" : "neg"}">${eur(s.ahorro_neto)}/a</td><td>${eur(s.capex_total)}</td>
+      <td style="text-align:left">${badge(s.cal_bdc1)}<br>${badge(s.cal_abs)}${s["eq.r2"] ? "<br>" + badge(s.cal_r2) : ""}</td>
+      <td><button class="btn" data-usar="${i}">Usar</button></td></tr>`).join("")}</table>`
+    : `<p class="desc">No hay ninguna combinación viable con estos filtros. Prueba a admitir equipos fuera de rango.</p>`;
+  document.querySelectorAll("[data-usar]").forEach((b) => b.onclick = () => {
+    const s = top[+b.dataset.usar];
+    Object.assign(caso, {"eq.bdc1": s["eq.bdc1"], "eq.abs": s["eq.abs"], "cal.t_ida": s["cal.t_ida"], "n.bdc1": 0, "n.abs": 0, "n.r2": 0});
+    if (s["eq.r2"]) caso["eq.r2"] = s["eq.r2"];
+    modo = s.modo;
+    document.querySelectorAll("#modos button").forEach((x) => x.classList.toggle("on", x.dataset.m === modo));
+    construirPanel(); calcular();
+    toast(`Aplicada la solución ${+b.dataset.usar + 1}`, true);
+    window.scrollTo({top: 0, behavior: "smooth"});
+  });
+}
 
 // ---------------------------------------------------------------- cabecera
 document.getElementById("modos").innerHTML = Object.entries(DATOS.modos).map(([k, v]) =>
   `<button data-m="${k}" class="${k === modo ? "on" : ""}">${v}</button>`).join("");
 document.querySelectorAll("#modos button").forEach((b) => b.onclick = () => {
-  modo = b.dataset.m; document.querySelectorAll("#modos button").forEach((x) => x.classList.toggle("on", x === b)); calcular();
+  modo = b.dataset.m; document.querySelectorAll("#modos button").forEach((x) => x.classList.toggle("on", x === b));
+  if (vista === "simple") construirPanel();  // el panel sencillo enseña R2 y precio del calor solo con recuperación
+  calcular();
 });
+function ponerVista(v) {
+  vista = v;
+  document.body.dataset.vista = v;
+  document.querySelectorAll("#vistas button").forEach((x) => x.classList.toggle("on", x.dataset.v === v));
+  construirPanel(); calcular();
+  window.dispatchEvent(new Event("resize"));  // que Plotly ajuste los gráficos que estaban ocultos
+}
+document.querySelectorAll("#vistas button").forEach((b) => b.onclick = () => ponerVista(b.dataset.v));
+document.body.dataset.vista = vista;
+document.querySelectorAll("#vistas button").forEach((x) => x.classList.toggle("on", x.dataset.v === vista));
 document.getElementById("b-reset").onclick = () => { caso = JSON.parse(JSON.stringify(DATOS.caso)); construirPanel(); calcular(); };
 document.getElementById("b-exp").onclick = () => {
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob([JSON.stringify(caso, null, 2)], {type: "application/json"}));
   a.download = "heat2cool_caso.json"; a.click();
 };
-document.getElementById("b-imp").onchange = (e) => {
-  const f = e.target.files[0]; if (!f) return;
-  f.text().then((t) => { caso = Object.assign(JSON.parse(JSON.stringify(DATOS.caso)), JSON.parse(t)); construirPanel(); calcular(); });
+// ---------------------------------------------------------------- importar: .xlsx (sin librerías) o .json
+let toastT = null;
+function toast(msg, ok) {
+  const t = document.getElementById("toast");
+  t.textContent = msg; t.className = "toast" + (ok ? "" : " mal"); t.style.display = "block";
+  clearTimeout(toastT); toastT = setTimeout(() => (t.style.display = "none"), ok ? 4000 : 9000);
+}
+
+async function leerZip(buf) {
+  const dv = new DataView(buf), u8 = new Uint8Array(buf);
+  let fin = -1;
+  for (let i = u8.length - 22; i >= Math.max(0, u8.length - 65557); i--) if (dv.getUint32(i, true) === 0x06054b50) { fin = i; break; }
+  if (fin < 0) throw new Error("no es un .xlsx válido");
+  const n = dv.getUint16(fin + 10, true), ficheros = {};
+  let p = dv.getUint32(fin + 16, true);
+  for (let k = 0; k < n; k++) {
+    const ln = dv.getUint16(p + 28, true), le = dv.getUint16(p + 30, true), lc = dv.getUint16(p + 32, true);
+    ficheros[new TextDecoder().decode(u8.subarray(p + 46, p + 46 + ln))] =
+      {metodo: dv.getUint16(p + 10, true), tam: dv.getUint32(p + 20, true), off: dv.getUint32(p + 42, true)};
+    p += 46 + ln + le + lc;
+  }
+  return async (nombre) => {
+    const f = ficheros[nombre]; if (!f) return null;
+    const ini = f.off + 30 + dv.getUint16(f.off + 26, true) + dv.getUint16(f.off + 28, true);
+    const datos = u8.subarray(ini, ini + f.tam);
+    if (f.metodo === 0) return new TextDecoder().decode(datos);
+    const s = new Blob([datos]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
+    return new Response(s).text();
+  };
+}
+
+async function leerXlsx(buf) {
+  const get = await leerZip(buf), dp = new DOMParser();
+  const xml = async (n) => { const t = await get(n); return t ? dp.parseFromString(t, "application/xml") : null; };
+  const ss = await xml("xl/sharedStrings.xml");
+  const textos = ss ? [...ss.getElementsByTagName("si")].map((si) => [...si.getElementsByTagName("t")].map((t) => t.textContent).join("")) : [];
+  const wb = await xml("xl/workbook.xml"), rels = await xml("xl/_rels/workbook.xml.rels");
+  if (!wb || !rels) throw new Error("no es un libro de Excel");
+  const destino = {};
+  for (const r of rels.getElementsByTagName("Relationship")) destino[r.getAttribute("Id")] = r.getAttribute("Target");
+  const hojas = {};
+  for (const s of wb.getElementsByTagName("sheet")) {
+    const t = destino[s.getAttribute("r:id")];
+    const doc = t && await xml(t.startsWith("/") ? t.slice(1) : "xl/" + t);
+    if (!doc) continue;
+    const filas = [];
+    for (const c of doc.getElementsByTagName("c")) {
+      const m = (c.getAttribute("r") || "").match(/^([A-Z]+)(\d+)$/); if (!m) continue;
+      const col = [...m[1]].reduce((a, ch) => a * 26 + ch.charCodeAt(0) - 64, 0) - 1, fila = +m[2] - 1;
+      const tipo = c.getAttribute("t"), v = c.getElementsByTagName("v")[0];
+      let val = null;
+      if (tipo === "s") val = v ? textos[+v.textContent] : null;
+      else if (tipo === "inlineStr") val = [...c.getElementsByTagName("t")].map((x) => x.textContent).join("");
+      else if (tipo === "str" || tipo === "e") val = v ? v.textContent : null;
+      else if (v) val = parseFloat(v.textContent);
+      (filas[fila] = filas[fila] || [])[col] = val;
+    }
+    hojas[s.getAttribute("name")] = filas;
+  }
+  return hojas;
+}
+
+function casoDesdeExcel(h) {
+  if (!h.Entradas) throw new Error("no tiene la hoja «Entradas»: sube entrada.xlsx o un Excel de resultados de heat2cool");
+  const c = JSON.parse(JSON.stringify(DATOS.caso));
+  const validas = new Set(DATOS.params.map((p) => p[1]));
+  let leidos = 0;
+  const perfil = [], barrido = [];
+  // entrada.xlsx: valor en C y ruta en G · Excel de resultados: valor en C y ruta en F
+  for (const f of h.Entradas.slice(1)) {
+    if (!f) continue;
+    const ruta = [f[6], f[5]].find((x) => typeof x === "string" && (validas.has(x) || /^(eq|n)\./.test(x) || x === "perfil")) || [f[6], f[5]].find((x) => typeof x === "string");
+    const v = f[2];
+    if (validas.has(ruta) && f[0] === "Barrido") {
+      const vals = String(v).split(";").map((x) => parseFloat(x.replace(",", "."))).filter(isFinite);
+      if (vals.length) barrido.push([ruta, vals]);
+    } else if (validas.has(ruta) && typeof v === "number") { c[ruta] = v; leidos++; }
+    else if (/^eq\./.test(ruta) && typeof v === "string") c[ruta] = v.trim();
+    else if (/^n\./.test(ruta) && typeof v === "number") c[ruta] = v;
+    else if (ruta === "perfil" && typeof v === "number") {
+      const m = String(f[1]).match(/([\d.,]+)\s*%/); if (m) perfil.push([parseFloat(m[1].replace(",", ".")) / 100, v]);
+    }
+  }
+  if (h.Equipos) for (const f of h.Equipos.slice(1)) {
+    if (f && typeof f[3] === "string" && f[3].startsWith("eq.")) { c[f[3]] = String(f[1]).trim(); c[f[4]] = +(f[2] || 0); }
+  }
+  if (h.Perfil) for (const f of h.Perfil.slice(1)) if (f && typeof f[0] === "number" && typeof f[1] === "number") perfil.push([f[0], f[1]]);
+  if (perfil.length) c.perfil = perfil;
+  if (h.Barrido && !h.Barrido[0]?.some((x) => x === "Ranking")) {  // hoja Barrido de entrada.xlsx (no la de resultados)
+    for (const f of h.Barrido.slice(1)) if (f && validas.has(f[0]) && f[1] != null) {
+      const vals = String(f[1]).split(";").map((x) => parseFloat(x.replace(",", "."))).filter(isFinite);
+      if (vals.length) barrido.push([f[0], vals]);
+    }
+  }
+  if (!leidos) throw new Error("no encontré ningún parámetro en la hoja «Entradas»");
+  return [c, barrido];
+}
+
+document.getElementById("b-imp").onchange = async (e) => {
+  const f = e.target.files[0];
+  e.target.value = "";  // para poder volver a importar el mismo fichero
+  if (!f) return;
+  try {
+    let nuevo, barrido = [];
+    if (/\.xlsx$/i.test(f.name)) [nuevo, barrido] = casoDesdeExcel(await leerXlsx(await f.arrayBuffer()));
+    else if (/\.json$/i.test(f.name)) {
+      let d;
+      try { d = JSON.parse(await f.text()); } catch (err) { throw new Error("el JSON no es válido"); }
+      if (typeof d !== "object" || d === null || Array.isArray(d)) throw new Error("el JSON no es un caso exportado");
+      nuevo = Object.assign(JSON.parse(JSON.stringify(DATOS.caso)), d);
+    } else throw new Error("formato no soportado: sube un .xlsx o un .json");
+    const faltan = DATOS.equipos.map((x) => nuevo[x[0]]).filter((n) => !CAT[n]);
+    if (faltan.length) throw new Error(`estos equipos no están en el catálogo del dashboard: ${faltan.join(", ")}. Vuelve a generarlo con simular.py.`);
+    H2C.evaluar(nuevo, CAT, modo);  // si no se puede calcular, salta aquí y no se pierde el caso actual
+    caso = nuevo;
+    if (barrido.length >= 2) { [mapa.x, mapa.xv] = barrido[0]; [mapa.y, mapa.yv] = barrido[1]; }
+    construirPanel(); construirCtlMapa(); calcular();
+    toast(`Cargado «${f.name}»`, true);
+  } catch (err) {
+    toast(`No se pudo importar «${f.name}»: ${err.message}`, false);
+  }
 };
 document.getElementById("b-tema").onclick = () => {
   const oscuro = matchMedia("(prefers-color-scheme: dark)").matches;
@@ -375,7 +762,7 @@ document.getElementById("b-tema").onclick = () => {
   try { localStorage.setItem("heat2cool_tema", document.documentElement.dataset.theme); } catch (e) {}
   calcular();
 };
-construirPanel(); construirCtlMapa(); calcular();
+construirPanel(); construirCtlMapa(); construirOptimizador(); calcular();
 </script>
 </body>
 </html>

@@ -80,6 +80,32 @@ for _, r in ab.iterrows():
                      # los puntos "calculado" de Thermax son medidas de campo a carga parcial: no son curva de máquina
                      usar=1 if r.tipo_dato == "fabricante" else 0, fuente=r.fuente))
 
+# ---------------------------------------------------------------- medidas de laboratorio (si existe el Excel)
+# Prototipo HTHP R1233zd(E) ~37 kW, Universidad de Bayreuth. DOI 10.17632/56m3dd55zf.1
+# Sin capacidad (q vacío): el prototipo no se escala a una máquina comercial; se usa solo para la forma del COP.
+MED = ROOT / "data" / "mediciones_bdc.xlsx"
+if MED.exists():
+    from openpyxl import load_workbook
+    filas = list(load_workbook(MED, data_only=True, read_only=True)["Datos"].iter_rows(values_only=True))
+    cab = next(i for i, f in enumerate(filas) if f and f[0] == "ID")
+    med = pd.DataFrame([f[:14] for f in filas[cab + 1:] if f and f[0]], columns=filas[cab][:14])
+    FUENTE_MED = "Medido (Bayreuth, DOI 10.17632/56m3dd55zf.1), serie {}; retorno caliente {:.0f} °C"
+    grupos = [
+        # plena carga: series de carga parcial a 70 Hz (salida 90/100/110/120 °C, fuente 60→50)
+        ("Prototipo R1233zd(E) · medido 70 Hz (plena carga)",
+         med[med.Serie.isin(["S04", "S05", "S06", "S07"]) & (med["Frecuencia Hz"] == 70)]),
+        # 50 Hz: salida 75-140 °C (S03), fuente 35-43 °C (S01) y retorno 50-60 °C de S02
+        ("Prototipo R1233zd(E) · medido 50 Hz",
+         med[med.Serie.isin(["S01", "S03"]) | ((med.Serie == "S02") & med["Caliente retorno °C"].between(45, 65))]),
+    ]
+    for nombre, g in grupos:
+        for _, r in g.iterrows():
+            rows.append(dict(tipo="bdc", equipo=nombre, t_fuente_sal=round(r["Fuente salida °C"], 2),
+                             t_caliente_sal=round(r["Caliente salida °C"], 2), cop=round(r["COP registrado"], 4),
+                             origen="medido", usar=1,
+                             fuente=FUENTE_MED.format(r["Serie"], r["Caliente retorno °C"])))
+    print(f"Medidas de laboratorio añadidas: {sum(len(g) for _, g in grupos)} puntos en {len(grupos)} equipos")
+
 out = ROOT / "catalogo" / "curvas.csv"
 out.parent.mkdir(exist_ok=True)
 pd.DataFrame(rows[:n_ejemplo], columns=COLS).to_csv(out.with_name("curvas_ejemplo.csv"), index=False, encoding="utf-8")

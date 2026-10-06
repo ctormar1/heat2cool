@@ -16,9 +16,17 @@ GENERICOS = {"eq.bdc1": "Genérico BdC (COP 4 a 50→90)",
              "eq.r2": "Genérico BdC CO2 (COP 4 a 30→90)"}
 
 
+SINTETICA = "Sintética 6 puntos (test)"
+
+
 @pytest.fixture(scope="module")
 def cat():
-    return catalogo.cargar()
+    c = dict(catalogo.cargar())
+    # η con máximo a mitad de rango, como en las medidas de laboratorio
+    c[SINTETICA] = {"tipo": "bdc", "origen": "medido", "puntos": [
+        {"ts": 50.0, "tk": tk, "q": None, "cop": cop} for tk, cop in
+        [(75, 4.84), (80, 4.61), (90, 4.14), (100, 3.68), (110, 3.25), (120, 2.82)]]}
+    return c
 
 
 @pytest.fixture
@@ -76,6 +84,15 @@ def test_calidad_del_dato(cat, caso):
     assert motor.bdc_en(caso, gen["bdc1"], 45, 105)["nivel"] == 0
 
 
+def test_ajuste_parabolico_reproduce_medidas(cat, caso):
+    ms = motor.modelos({**caso, "eq.bdc1": SINTETICA}, cat)
+    assert ms["bdc1"]["c"] != 0.0                       # con 6 saltos en 45 K usa parábola
+    for p in cat[SINTETICA]["puntos"]:
+        assert motor.bdc_en(caso, ms["bdc1"], p["ts"], p["tk"])["cop"] == pytest.approx(p["cop"], rel=0.03)
+    pocos = motor.ajustar_bdc(caso, {"origen": "x", "puntos": cat[SINTETICA]["puntos"][:3]})
+    assert pocos["c"] == 0.0                            # con 3 puntos sigue siendo recta
+
+
 def test_dimensiona_unidades_y_limita_por_capacidad(cat, caso):
     c = {**caso, "eq.abs": "Ejemplo absorción 50 kW"}
     r = motor.evaluar(c, cat, "sin_recuperacion")
@@ -127,7 +144,10 @@ def test_paridad_python_javascript(tmp_path, cat, caso):
     casos = [(caso, m) for m in P.MODOS]
     casos += [({**caso, **GENERICOS}, "con_recuperacion"),
               ({**caso, "eq.abs": "Ejemplo absorción 50 kW", "cal.t_ida": 80.0, "frio.t_imp": 5.0}, "sin_recuperacion"),
-              ({**caso, "bdc.pen_carga": 0.3, "abs.pen_carga": 0.2, "rec.cobertura": 0.6}, "con_recuperacion")]
+              ({**caso, "bdc.pen_carga": 0.3, "abs.pen_carga": 0.2, "rec.cobertura": 0.6}, "con_recuperacion"),
+              ({**caso, "eq.bdc1": SINTETICA, "cal.t_ida": 84.0}, "sin_recuperacion"),
+              ({**caso, "rec.r2_on": 0.0}, "con_recuperacion"),
+              ({**caso, "rec.r1_on": 0.0, "rec.r2_kw": 0.0}, "con_recuperacion")]
     entrada = {"cat": web.datos(cat, caso)["catalogo"], "casos": [[c, m] for c, m in casos]}
     f = tmp_path / "casos.json"
     f.write_text(web._json_seguro(entrada), encoding="utf-8")
@@ -154,3 +174,59 @@ def test_paridad_python_javascript(tmp_path, cat, caso):
         for k, vp in rp["diseno"].items():
             if isinstance(vp, float):
                 assert rj["diseno"][k] == pytest.approx(vp, rel=1e-9, abs=1e-9), f"diseño {k}"
+
+
+def test_optimizador_ordena_y_respeta_filtros(cat, caso):
+    sols = estudio.soluciones(caso, cat)
+    assert sols
+    top = estudio.ordenar(sols, "coste_util")
+    assert [x["coste_util"] for x in top] == sorted(x["coste_util"] for x in top)
+    assert all(max(x["cal_bdc1"], x["cal_abs"], x["cal_r2"]) <= 2 for x in sols)     # nada fuera de rango
+    assert not any(cat[x["eq.bdc1"]]["origen"] == "generico" for x in sols)           # sin genéricos por defecto
+    mejor = top[0]
+    r = motor.evaluar({**caso, "eq.bdc1": mejor["eq.bdc1"], "eq.abs": mejor["eq.abs"], "eq.r2": mejor["eq.r2"] or caso["eq.r2"],
+                       "cal.t_ida": mejor["cal.t_ida"], "n.bdc1": 0, "n.abs": 0, "n.r2": 0}, cat, mejor["modo"])
+    assert r["coste_util"] == pytest.approx(mejor["coste_util"])                      # la solución se puede reproducir
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node no instalado")
+def test_paridad_optimizador(tmp_path, cat, caso):
+    f = tmp_path / "opt.json"
+    caso = {**caso, "opt.recuperacion": 2.0, "rec.r2_on": 0.0}   # también la opción de recuperación del optimizador
+    f.write_text(web._json_seguro({"cat": web.datos(cat, caso)["catalogo"], "caso": caso}), encoding="utf-8")
+    script = (f"const H=require({json.dumps(str(RAIZ / 'web' / 'motor.js'))});"
+              f"const d=JSON.parse(require('fs').readFileSync({json.dumps(str(f))},'utf8'));"
+              "const s=H.soluciones(d.caso,d.cat);const o={n:s.length};"
+              "for(const k of Object.keys(H.OBJETIVOS)) o[k]=H.ordenar(s,k).slice(0,5).map(x=>[x.modo,x['cal.t_ida'],x['eq.bdc1'],x['eq.abs'],x['eq.r2'],x[k]]);"
+              "console.log(JSON.stringify(o));")
+    js = json.loads(subprocess.run(["node", "-e", script], capture_output=True, text=True, check=True, encoding="utf-8").stdout)
+    sols = estudio.soluciones(caso, cat)
+    assert js["n"] == len(sols)
+    for k in estudio.OBJETIVOS:
+        py = [[x["modo"], x["cal.t_ida"], x["eq.bdc1"], x["eq.abs"], x["eq.r2"], x[k]] for x in estudio.ordenar(sols, k)[:5]]
+        for a, b in zip(py, js[k]):
+            assert a[:5] == b[:5], k
+            assert a[5] == pytest.approx(b[5], rel=1e-9)
+
+
+def test_interruptores_de_recuperacion(cat, caso):
+    sin = motor.evaluar(caso, cat, "sin_recuperacion")
+    apagada = motor.evaluar({**caso, "rec.r1_on": 0.0, "rec.r2_on": 0.0}, cat, "con_recuperacion")
+    for k in ("ahorro_neto", "capex_total", "coste_util", "calor_rec_mwh", "elec_sis_mwh"):
+        assert apagada[k] == pytest.approx(sin[k]), k                    # con todo apagado = sin recuperación
+    solo_r1 = motor.evaluar({**caso, "rec.r2_on": 0.0}, cat, "con_recuperacion")
+    assert solo_r1["capex_r2"] == 0.0 and solo_r1["n_r2"] == 0 and solo_r1["e_r2_mwh"] == 0.0
+    assert solo_r1["calor_rec_mwh"] > 0                                  # R1 sigue entregando calor
+    sin_demanda = motor.evaluar({**caso, "rec.r2_kw": 0.0}, cat, "con_recuperacion")
+    assert sin_demanda["capex_r2"] == 0.0                                # sin demanda de R2 no se compra la BdC R2
+
+
+def test_optimizador_respeta_la_opcion_de_recuperacion(cat, caso):
+    assert estudio.modos_opt({**caso, "opt.recuperacion": 0.0}) == ("sin_recuperacion",)
+    assert estudio.modos_opt({**caso, "opt.recuperacion": 2.0}) == ("con_recuperacion",)
+    assert estudio.modos_opt({**caso, "opt.recuperacion": 1.0}) == ("sin_recuperacion", "con_recuperacion")
+    assert estudio.modos_opt({**caso, "rec.r1_on": 0.0, "rec.r2_on": 0.0}) == ("sin_recuperacion",)
+    sols = estudio.soluciones({**caso, "opt.recuperacion": 0.0}, cat)
+    assert sols and all(s["modo"] == "sin_recuperacion" for s in sols)
+    sols = estudio.soluciones({**caso, "opt.recuperacion": 2.0, "rec.r2_on": 0.0}, cat)
+    assert sols and all(s["modo"] == "con_recuperacion" and s["eq.r2"] == "" for s in sols)
